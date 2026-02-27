@@ -1,83 +1,197 @@
 {% extends "base.html" %}
 {% block title %}مسنجر — {{ username }}{% endblock %}
 {% block extra_css %}
-/* تلگرام‌وار: رنگ اصلی */
-.messenger-page { --tg-accent: #2aabee; --tg-accent-dim: rgba(42, 171, 238, 0.15); }
-html.theme-light .messenger-page {
-    --tg-accent: #229ED9;
-    --tg-accent-dim: rgba(34, 158, 217, 0.18);
+/* ——— پالت و متغیرهای تلگرام ——— */
+.tg-app {
+    --tg-blue: #2AABEE;
+    --tg-blue-hover: #229ED9;
+    --tg-bg: #0E1621;
+    --tg-panel: #17212B;
+    --tg-surface: #242F3D;
+    --tg-text: #FFFFFF;
+    --tg-text-secondary: #708499;
+    --tg-bubble-sent: #2AABEE;
+    --tg-bubble-received: #182533;
+    --tg-border: rgba(255,255,255,0.06);
+    --tg-input-bg: #242F3D;
+    --safe-top: env(safe-area-inset-top, 0);
+    --safe-bottom: env(safe-area-inset-bottom, 0);
+    --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
-html.theme-light .chat-placeholder .history-item {
-    background: rgba(255,255,255,0.85);
-    border-color: rgba(0,0,0,0.06);
+html.theme-light .tg-app {
+    --tg-bg: #FFFFFF;
+    --tg-panel: #F0F2F5;
+    --tg-surface: #FFFFFF;
+    --tg-text: #000000;
+    --tg-text-secondary: #707579;
+    --tg-bubble-sent: #3390EC;
+    --tg-bubble-received: #EFFEDE;
+    --tg-border: rgba(0,0,0,0.08);
+    --tg-input-bg: #FFFFFF;
 }
-html.theme-light .chat-placeholder .history-item:hover,
-html.theme-light .chat-placeholder .history-item.active {
-    background: var(--tg-accent-dim);
-    border-color: rgba(34, 158, 217, 0.25);
-}
-html.theme-light .chat-messages .msg.received { background: #fff; border-color: rgba(0,0,0,0.08); color: #0f172a; }
-html.theme-light .drawer-overlay .drawer { background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); border-color: rgba(148, 163, 184, 0.4); }
-html.theme-light .pwa-install-banner { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-color: rgba(148, 163, 184, 0.5); }
-.messenger-page {
+.tg-app {
     display: flex;
-    flex-direction: column;
+    width: 100%;
+    max-width: 100%;
     height: calc(100vh - var(--safe-top) - var(--safe-bottom));
     height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
-    max-height: 860px;
-    margin: 0 auto;
-    max-width: 680px;
-    background: rgba(30, 41, 59, 0.6);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-radius: 24px;
+    background: var(--tg-bg);
     overflow: hidden;
-    border: 1px solid rgba(71, 85, 105, 0.4);
-    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.45);
-    transition: box-shadow var(--transition);
 }
-.messenger-page:focus-within { box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px var(--accent-dim); }
-.msg-header {
+.messenger-page { --tg-accent: var(--tg-blue); --tg-accent-dim: rgba(42, 171, 238, 0.15); }
+html.theme-light .messenger-page { --tg-accent: var(--tg-blue-hover); --tg-accent-dim: rgba(51, 144, 236, 0.18); }
+
+/* ——— سایدبار (لیست چت‌ها) مثل تلگرام ——— */
+.tg-sidebar {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    background: var(--tg-panel);
+    border-left: 1px solid var(--tg-border);
+    min-height: 0;
+}
+@media (min-width: 768px) {
+    .tg-sidebar { width: 380px; flex-shrink: 0; }
+    .tg-main.has-chat .tg-chat-header .back-btn { display: none; }
+}
+@media (max-width: 767px) {
+    .tg-sidebar.hidden-mobile { display: none !important; }
+    .tg-main.hidden-mobile { display: none !important; }
+}
+.tg-sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    min-height: 54px;
+    background: var(--tg-panel);
+    border-bottom: 1px solid var(--tg-border);
+}
+.tg-icon-btn {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--tg-text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+}
+.tg-icon-btn:hover { background: var(--tg-border); color: var(--tg-text); }
+.tg-search-input {
+    flex: 1;
+    min-width: 0;
+    height: 42px;
+    padding: 0 1rem;
+    border: none;
+    border-radius: 21px;
+    background: var(--tg-input-bg);
+    color: var(--tg-text);
+    font-size: 0.95rem;
+}
+.tg-search-input::placeholder { color: var(--tg-text-secondary); }
+.tg-search-input:focus { outline: none; }
+.tg-chat-list-wrap {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+.tg-chat-list { list-style: none; margin: 0; padding: 0; }
+.tg-chat-list .history-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.85rem 1.25rem;
-    background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(30, 41, 59, 0.95) 100%);
-    border-bottom: 1px solid rgba(71, 85, 105, 0.4);
-    min-height: 60px;
-    transition: background var(--transition);
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--tg-border);
+    cursor: pointer;
+    text-align: right;
+    background: transparent;
+    border-radius: 0;
+    margin: 0;
+    transition: background 0.15s;
 }
-.msg-header .back-btn {
-    display: none;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 0;
-    border-radius: 12px;
-    color: var(--text);
-    transition: background var(--transition), transform 0.15s var(--ease);
-}
-.msg-header .back-btn:hover { background: var(--accent-dim); color: var(--accent); }
-.msg-header .back-btn.visible { display: inline-flex; }
-.msg-header .hamburger-btn {
-    display: inline-flex;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 0;
-    border-radius: 12px;
+.tg-chat-list .history-item:hover { background: rgba(255,255,255,0.04); }
+.tg-chat-list .history-item.active { background: var(--tg-surface); }
+.tg-chat-list .history-item .h-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--tg-blue), var(--tg-blue-hover));
+    display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.4rem;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    transition: background var(--transition);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
 }
-.msg-header .hamburger-btn:hover { background: var(--accent-dim); }
-.msg-header .hamburger-btn.hidden { display: none !important; }
-.msg-header .title { flex: 1; font-weight: 700; font-size: 1.05rem; letter-spacing: -0.02em; }
-.msg-header .header-link { font-size: 0.85rem; padding: 0.5rem 0.9rem; text-decoration: none; border-radius: 10px; }
-.msg-header .header-actions { display: flex; align-items: center; gap: 0.35rem; }
+.tg-chat-list .history-item .h-body { flex: 1; min-width: 0; }
+.tg-chat-list .history-item .h-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.15rem; }
+.tg-chat-list .history-item .h-username { font-weight: 600; font-size: 0.95rem; color: var(--tg-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-chat-list .history-item .h-preview { font-size: 0.85rem; color: var(--tg-text-secondary); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-chat-list .history-item .h-time { font-size: 0.75rem; color: var(--tg-text-secondary); flex-shrink: 0; }
+.tg-chat-list .history-item .h-delete { margin-right: auto; }
+.tg-chat-list-empty {
+    padding: 2rem 1.5rem;
+    text-align: center;
+    color: var(--tg-text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+/* ——— ناحیهٔ اصلی و هدر چت ——— */
+.tg-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--tg-bg);
+}
+.tg-chat-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    min-height: 54px;
+    background: var(--tg-panel);
+    border-bottom: 1px solid var(--tg-border);
+}
+.tg-chat-header .back-btn {
+    display: inline-flex;
+    font-size: 1.75rem;
+    line-height: 1;
+}
+@media (min-width: 768px) { .tg-chat-header .back-btn { display: none; } }
+.tg-chat-header-title {
+    flex: 1;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--tg-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tg-chat-header-actions { display: flex; align-items: center; gap: 0.25rem; }
+.tg-chat-header-actions .chat-with-actions { display: flex; align-items: center; gap: 0.25rem; }
+.tg-welcome {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+}
+.tg-welcome-icon { font-size: 4rem; opacity: 0.4; margin-bottom: 1rem; }
+.tg-welcome-title { margin: 0 0 0.5rem; font-size: 1.5rem; font-weight: 700; color: var(--tg-text); }
+.tg-welcome-desc { margin: 0; font-size: 0.95rem; color: var(--tg-text-secondary); line-height: 1.6; max-width: 320px; }
 .chat-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
 /* ——— منوی همبرگری (دراور) ——— */
@@ -240,91 +354,27 @@ html.theme-light .theme-opt { border-color: rgba(100, 116, 139, 0.5); }
 html.theme-light .theme-opt:hover { background: rgba(0,0,0,0.06); }
 html.theme-light .theme-opt.active { background: var(--tg-accent); color: #fff; border-color: var(--tg-accent); }
 
-/* ——— تم روشن: کل صفحه مسنجر ——— */
-html.theme-light .messenger-page {
-    background: rgba(255, 255, 255, 0.85);
-    border-color: rgba(148, 163, 184, 0.5);
-    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15);
-}
-html.theme-light .messenger-page:focus-within {
-    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.18), 0 0 0 1px var(--accent-dim);
-}
-html.theme-light .msg-header {
-    background: linear-gradient(135deg, rgba(34, 158, 217, 0.12) 0%, rgba(248, 250, 252, 0.98) 100%);
-    border-bottom-color: rgba(148, 163, 184, 0.4);
-}
+/* ——— تم روشن تلگرام ——— */
+html.theme-light .tg-app .tg-sidebar-header,
+html.theme-light .tg-app .tg-chat-header { border-bottom-color: var(--tg-border); }
+html.theme-light .tg-app .tg-chat-list .history-item:hover { background: rgba(0,0,0,0.04); }
+html.theme-light .tg-app .tg-chat-list .history-item.active { background: var(--tg-surface); }
 html.theme-light .drawer-overlay { background: rgba(0,0,0,0.35); }
-html.theme-light .drawer {
-    box-shadow: -8px 0 32px rgba(0,0,0,0.15);
-}
+html.theme-light .drawer { box-shadow: -8px 0 32px rgba(0,0,0,0.15); }
 html.theme-light .drawer-header { border-bottom-color: rgba(148, 163, 184, 0.35); }
 html.theme-light .drawer-item:hover { background: var(--tg-accent-dim); }
 html.theme-light .drawer-new-chat { border-bottom-color: rgba(148, 163, 184, 0.35); }
-html.theme-light .settings-item {
-    background: rgba(226, 232, 240, 0.9);
-    border-color: rgba(148, 163, 184, 0.25);
-}
+html.theme-light .settings-item { background: rgba(226, 232, 240, 0.9); border-color: rgba(148, 163, 184, 0.25); }
 html.theme-light .settings-item:hover { background: rgba(203, 213, 225, 0.95); }
 html.theme-light .chat-search-in-chat { background: rgba(241, 245, 249, 0.95); }
-html.theme-light .chat-with-actions .btn-icon-small:hover { background: rgba(0,0,0,0.08); }
-html.theme-light .chat-with {
-    background: rgba(248, 250, 252, 0.98);
-    border-bottom-color: rgba(148, 163, 184, 0.4);
-}
-html.theme-light .chat-messages {
-    background: repeating-linear-gradient(
-        180deg,
-        transparent,
-        transparent 40px,
-        rgba(0,0,0,0.02) 40px,
-        rgba(0,0,0,0.02) 41px
-    );
-}
-html.theme-light .chat-form {
-    background: rgba(248, 250, 252, 0.98);
-    border-top-color: rgba(148, 163, 184, 0.4);
-}
-html.theme-light .composer-row {
-    background: #fff;
-    border-color: rgba(148, 163, 184, 0.4);
-}
-html.theme-light .chat-form:focus-within .composer-row {
-    border-color: var(--tg-accent);
-    box-shadow: 0 0 0 2px var(--tg-accent-dim);
-}
-html.theme-light .composer-attachment-strip {
-    background: #fff;
-    border-color: rgba(148, 163, 184, 0.4);
-}
-html.theme-light .composer-attachment-remove:hover {
-    background: rgba(220, 38, 38, 0.2);
-}
+html.theme-light .chat-form { border-top-color: var(--tg-border); }
+html.theme-light .composer-attachment-strip { background: var(--tg-input-bg); }
 html.theme-light .msg .msg-del:hover { background: rgba(0,0,0,0.1); }
-html.theme-light .mic-permission-card {
-    background: linear-gradient(145deg, rgba(34, 158, 217, 0.1) 0%, rgba(255, 255, 255, 0.95) 100%);
-    border-color: rgba(34, 158, 217, 0.3);
-}
-html.theme-light .mic-permission-card.insecure {
-    background: linear-gradient(145deg, rgba(251, 191, 36, 0.12) 0%, rgba(255, 255, 255, 0.95) 100%);
-    border-color: rgba(251, 191, 36, 0.35);
-}
-html.theme-light .mic-permission-icon { background: rgba(34, 158, 217, 0.18); }
-html.theme-light .mic-permission-card.insecure .mic-permission-icon { background: rgba(251, 191, 36, 0.2); }
-html.theme-light .voice-recording {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.99) 100%);
-    border-color: rgba(220, 38, 38, 0.3);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-}
-html.theme-light .voice-preview {
-    background: linear-gradient(135deg, rgba(226, 232, 240, 0.9) 0%, rgba(241, 245, 249, 0.95) 100%);
-    border-color: rgba(148, 163, 184, 0.45);
-}
-html.theme-light .voice-preview-progress-wrap { background: rgba(148, 163, 184, 0.35); }
-html.theme-light .msg.received .voice-msg-bubble .voice-play-btn { background: rgba(0,0,0,0.1); }
-html.theme-light .msg.received .voice-msg-bubble .voice-play-btn:hover { background: rgba(0,0,0,0.18); }
-html.theme-light .pwa-install-banner {
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
-}
+html.theme-light .mic-permission-card { background: linear-gradient(145deg, rgba(51, 144, 236, 0.1) 0%, #fff 100%); border-color: rgba(51, 144, 236, 0.3); }
+html.theme-light .mic-permission-card.insecure { background: linear-gradient(145deg, rgba(251, 191, 36, 0.12) 0%, #fff 100%); border-color: rgba(251, 191, 36, 0.35); }
+html.theme-light .voice-recording { background: #fff; border-color: rgba(220, 38, 38, 0.3); }
+html.theme-light .voice-preview { background: var(--tg-panel); border-color: var(--tg-border); }
+html.theme-light .pwa-install-banner { box-shadow: 0 -4px 24px rgba(0,0,0,0.1); }
 
 .settings-about {
     font-size: 0.9rem;
@@ -470,95 +520,108 @@ html.theme-light .pwa-install-banner {
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid rgba(71, 85, 105, 0.35);
-    font-weight: 700;
+    padding: 0.5rem 0.75rem;
+    min-height: 54px;
+    border-bottom: 1px solid var(--tg-border);
+    font-weight: 600;
     font-size: 1rem;
-    background: rgba(15, 23, 42, 0.5);
+    background: var(--tg-panel);
 }
 .chat-with .chat-with-actions { display: flex; align-items: center; gap: 0.25rem; }
-.chat-with .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.8rem; border-radius: 10px; }
+.chat-with .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; border-radius: 8px; }
 .chat-messages {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 1.25rem;
+    padding: 0.75rem 1rem 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.25rem;
     -webkit-overflow-scrolling: touch;
-    background: repeating-linear-gradient(
-        180deg,
-        transparent,
-        transparent 40px,
-        rgba(0,0,0,0.02) 40px,
-        rgba(0,0,0,0.02) 41px
-    );
+    background: var(--tg-bg);
+}
+html.theme-light .chat-messages {
+    background: var(--tg-bg);
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0L30 60M0 30L60 30' stroke='%23e5e5e5' stroke-width='0.5' fill='none'/%3E%3C/svg%3E");
+}
+.chat-messages .msg-date-sep {
+    text-align: center;
+    margin: 0.75rem 0;
+}
+.chat-messages .msg-date-sep span {
+    padding: 0.25rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: var(--tg-text-secondary);
+    background: var(--tg-surface);
 }
 .chat-messages .msg {
-    max-width: 82%;
-    padding: 0.75rem 1rem;
-    border-radius: 18px;
-    line-height: 1.55;
+    max-width: 75%;
+    padding: 0.5rem 0.75rem 0.35rem;
+    border-radius: 12px;
+    line-height: 1.5;
     word-break: break-word;
-    box-shadow: var(--shadow-sm);
     transition: transform 0.15s var(--ease);
-    animation: msgIn 0.25s var(--ease);
+    animation: msgIn 0.2s var(--ease);
+    position: relative;
 }
 @keyframes msgIn {
-    from { opacity: 0; transform: scale(0.96); }
+    from { opacity: 0; transform: scale(0.97); }
     to { opacity: 1; transform: scale(1); }
 }
 .chat-messages .msg.sent {
     align-self: flex-end;
-    background: linear-gradient(135deg, var(--tg-accent), #229ED9);
+    background: var(--tg-bubble-sent);
     color: #fff;
-    border-bottom-left-radius: 6px;
+    border-bottom-left-radius: 4px;
 }
-.chat-messages .msg.hidden-by-search { display: none !important; }
 .chat-messages .msg.received {
     align-self: flex-start;
-    background: var(--surface);
-    border: 1px solid rgba(71, 85, 105, 0.5);
-    border-bottom-right-radius: 6px;
+    background: var(--tg-bubble-received);
+    color: var(--tg-text);
+    border-bottom-right-radius: 4px;
+}
+.chat-messages .msg.hidden-by-search { display: none !important; }
+.chat-messages .msg .msg-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    margin-top: 0.25rem;
 }
 .chat-messages .msg time {
     font-size: 0.7rem;
-    opacity: 0.9;
-    display: block;
-    margin-top: 0.4rem;
+    opacity: 0.85;
 }
+.chat-messages .msg .msg-read { font-size: 0.75rem; opacity: 0.9; }
 .chat-messages .msg .msg-img {
     max-width: 100%;
-    border-radius: 12px;
+    border-radius: 10px;
     display: block;
-    margin-bottom: 0.35rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    margin-bottom: 0.3rem;
 }
 .chat-messages .msg .msg-file { color: inherit; text-decoration: underline; opacity: 0.95; }
-.msg { position: relative; }
 .msg .msg-del {
     position: absolute;
-    left: 0.35rem;
-    top: 0.35rem;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.8rem;
-    border-radius: 8px;
-    opacity: 0.85;
-    transition: opacity var(--transition), background var(--transition);
+    left: 0.25rem;
+    top: 0.25rem;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    opacity: 0.8;
+    transition: opacity 0.2s, background 0.2s;
 }
-.msg .msg-del:hover { opacity: 1; background: rgba(0,0,0,0.2); }
-.msg .msg-read { font-size: 0.7rem; margin-top: 0.2rem; opacity: 0.9; }
-.msg .msg-sender-name { font-size: 0.75rem; font-weight: 600; color: var(--tg-accent); margin-bottom: 0.2rem; display: block; }
+.msg .msg-del:hover { opacity: 1; background: rgba(0,0,0,0.15); }
+.msg .msg-sender-name { font-size: 0.75rem; font-weight: 600; color: var(--tg-blue); margin-bottom: 0.15rem; display: block; }
 /* ——— فرم ارسال (سبک تلگرام) ——— */
 .chat-form {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem;
-    padding-bottom: max(0.75rem, var(--safe-bottom));
-    border-top: 1px solid rgba(71, 85, 105, 0.35);
-    background: rgba(15, 23, 42, 0.5);
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    padding-bottom: max(0.5rem, var(--safe-bottom));
+    border-top: 1px solid var(--tg-border);
+    background: var(--tg-panel);
 }
 /* نوار پیش‌نمایش فایل/عکس */
 .composer-attachment-strip {
@@ -637,100 +700,85 @@ html.theme-light .pwa-install-banner {
 .composer-row {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    min-height: 48px;
-    padding: 0.4rem 0.5rem;
-    border-radius: 24px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    transition: border-color var(--transition), box-shadow var(--transition);
+    gap: 0.35rem;
+    min-height: 44px;
+    padding: 0.3rem 0.4rem 0.3rem 0.5rem;
+    border-radius: 22px;
+    background: var(--tg-input-bg);
+    border: 1px solid var(--tg-border);
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 .chat-form:focus-within .composer-row {
-    border-color: var(--tg-accent);
-    box-shadow: 0 0 0 2px var(--tg-accent-dim);
+    border-color: var(--tg-blue);
+    box-shadow: 0 0 0 1px var(--tg-blue);
 }
 .composer-input {
     flex: 1;
     min-width: 0;
     margin: 0;
-    padding: 0.5rem 0.75rem 0.5rem 1rem;
+    padding: 0.4rem 0.5rem;
     border: none;
     border-radius: 0;
     background: transparent;
-    color: var(--text);
-    font-size: 1rem;
+    color: var(--tg-text);
+    font-size: 0.95rem;
     font-family: inherit;
 }
-.composer-input::placeholder { color: var(--text-soft); }
+.composer-input::placeholder { color: var(--tg-text-secondary); }
 .composer-input:focus { outline: none; }
 .composer-btn {
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
     padding: 0;
     border: none;
     border-radius: 50%;
     background: transparent;
-    color: var(--text-soft);
-    font-size: 1.2rem;
+    color: var(--tg-text-secondary);
+    font-size: 1.15rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: background 0.2s, color 0.2s, transform 0.15s var(--ease);
+    transition: background 0.2s, color 0.2s;
 }
 .composer-btn:hover {
-    background: var(--tg-accent-dim);
-    color: var(--tg-accent);
-    transform: scale(1.05);
+    background: var(--tg-border);
+    color: var(--tg-text);
 }
-.composer-btn-attach { font-size: 1.15rem; }
-.composer-btn-voice { font-size: 1.2rem; }
+.composer-btn-attach { font-size: 1.1rem; }
+.composer-btn-voice { font-size: 1.1rem; }
 .composer-btn-voice.recording {
-    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    background: #e53935;
     color: #fff;
-    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.35);
     animation: btnVoicePulse 1.5s ease-in-out infinite;
 }
-.composer-btn-voice.recording:hover { color: #fff; transform: scale(1.05); }
+.composer-btn-voice.recording:hover { color: #fff; }
 @keyframes btnVoicePulse {
-    0%, 100% { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.35); }
-    50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.15); }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
 }
 .composer-send {
     flex-shrink: 0;
-    min-width: 44px;
+    width: 44px;
     height: 44px;
-    padding: 0 1rem;
+    padding: 0;
     border: none;
-    border-radius: 22px;
-    background: linear-gradient(135deg, var(--tg-accent), #229ED9);
+    border-radius: 50%;
+    background: var(--tg-blue);
     color: #fff;
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 1.1rem;
     font-family: inherit;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.35rem;
-    box-shadow: 0 2px 12px rgba(42, 171, 238, 0.35);
-    transition: transform 0.15s var(--ease), box-shadow 0.2s var(--ease);
+    transition: transform 0.15s, background 0.2s;
 }
-.composer-send:hover {
-    transform: scale(1.03);
-    box-shadow: 0 4px 20px rgba(42, 171, 238, 0.45);
-}
+.composer-send:hover { background: var(--tg-blue-hover); transform: scale(1.05); }
 .composer-send:active { transform: scale(0.98); }
-.composer-send-icon {
-    font-size: 1rem;
-    opacity: 0.95;
-}
-.composer-send-text { display: inline; }
-@media (max-width: 380px) {
-    .composer-send-text { display: none; }
-    .composer-send { padding: 0; min-width: 44px; }
-}
+.composer-send-icon { opacity: 0.95; }
+.composer-send-text { display: none; }
 
 /* ——— کارت درخواست اجازهٔ میکروفون ——— */
 .mic-permission-card {
@@ -1012,25 +1060,43 @@ html.theme-light .pwa-install-banner {
 }
 {% endblock %}
 {% block body %}
-<div class="messenger-page container">
-    <header class="msg-header">
-        <button type="button" class="btn btn-ghost hamburger-btn" id="hamburgerBtn" aria-label="منو">☰</button>
-        <button type="button" class="btn btn-ghost back-btn" id="backBtn" aria-label="بازگشت">←</button>
-        <span class="title" id="headerTitle">مسنجر</span>
-        <div class="header-actions" id="headerActions"></div>
-    </header>
+<div class="tg-app" id="tgApp">
+    <!-- سایدبار تلگرام‌وار: لیست چت‌ها -->
+    <aside class="tg-sidebar" id="tgSidebar">
+        <header class="tg-sidebar-header">
+            <button type="button" class="tg-icon-btn hamburger-btn" id="hamburgerBtn" aria-label="منو">≡</button>
+            <input type="text" class="tg-search-input" id="convoSearch" placeholder="جستجو" autocomplete="off">
+        </header>
+        <div class="tg-chat-list-wrap">
+            <ul class="tg-chat-list" id="historyList"></ul>
+            <div class="tg-chat-list-empty" id="historyEmpty" style="display: none;">
+                گفتگویی ندارید.<br>از منو «گفتگوی جدید» بزنید.
+            </div>
+        </div>
+    </aside>
+    <!-- ناحیهٔ اصلی: هدر + چت یا خالی -->
+    <main class="tg-main" id="tgMain">
+        <header class="tg-chat-header" id="tgChatHeader">
+            <button type="button" class="tg-icon-btn back-btn" id="backBtn" aria-label="بازگشت">‹</button>
+            <span class="tg-chat-header-title" id="chatHeaderTitle">مسنجر</span>
+            <div class="tg-chat-header-actions" id="headerActions">
+                <div class="chat-with-actions chat-actions-1-1" id="chatHeaderActions1" style="display: none;">
+                    <button type="button" class="tg-icon-btn" id="chatSearchToggle" title="جستجو در چت">🔍</button>
+                    <button type="button" class="tg-icon-btn" id="chatClearChatBtn" title="حذف گفتگو">🗑</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="blockBtn" style="display: none;">مسدود</button>
+                </div>
+                <div class="chat-with-actions chat-actions-group" id="chatHeaderActionsGroup" style="display: none;">
+                    <button type="button" class="btn btn-ghost btn-sm" id="groupInviteLinkBtn" title="لینک دعوت">🔗</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="groupLeaveBtn" title="ترک گروه">ترک</button>
+                </div>
+            </div>
+        </header>
     <div class="chat-body">
         <div class="chat-placeholder" id="chatPlaceholder">
-            <div class="history-section">
-                <div class="history-title">گفتگوها</div>
-                <div class="history-search">
-                    <input type="text" id="convoSearch" placeholder="جستجو در گفتگوها..." autocomplete="off">
-                    <button type="button" class="btn btn-secondary" id="convoSearchBtn">جستجو</button>
-                </div>
-                <ul class="history-list" id="historyList"></ul>
-                <div class="history-empty" id="historyEmpty" style="display: none;">
-                    گفتگویی ندارید. از منو «گفتگوی جدید» را بزنید.
-                </div>
+            <div class="tg-welcome" id="tgWelcome">
+                <div class="tg-welcome-icon">✈</div>
+                <h2 class="tg-welcome-title">مسنجر</h2>
+                <p class="tg-welcome-desc">برای شروع یک گفتگو را از لیست انتخاب کنید یا از منو گفتگوی جدید بسازید.</p>
             </div>
         </div>
         <div class="settings-panel" id="settingsPanel">
@@ -1073,18 +1139,6 @@ html.theme-light .pwa-install-banner {
             <div class="settings-version">نسخه ۱.۰</div>
         </div>
         <div class="chat-active" id="chatActive">
-            <div class="chat-with" id="chatHeader">
-                <span id="chatHeaderTitle"></span>
-                <div class="chat-with-actions chat-actions-1-1" id="chatHeaderActions1">
-                    <button type="button" class="btn-icon-small" id="chatSearchToggle" title="جستجو در چت">🔍</button>
-                    <button type="button" class="btn-icon-small" id="chatClearChatBtn" title="حذف گفتگو">🗑</button>
-                    <button type="button" class="btn btn-ghost btn-sm" id="blockBtn" style="display: none;">مسدود</button>
-                </div>
-                <div class="chat-with-actions chat-actions-group" id="chatHeaderActionsGroup" style="display: none;">
-                    <button type="button" class="btn btn-ghost btn-sm" id="groupInviteLinkBtn" title="کپی لینک دعوت">🔗 لینک دعوت</button>
-                    <button type="button" class="btn btn-ghost btn-sm" id="groupLeaveBtn" title="ترک گروه">ترک گروه</button>
-                </div>
-            </div>
             <div class="chat-search-in-chat" id="chatSearchInChat">
                 <input type="text" id="chatSearchInput" placeholder="جستجو در این گفتگو..." autocomplete="off">
             </div>
@@ -1147,6 +1201,7 @@ html.theme-light .pwa-install-banner {
             <audio id="voicePreviewAudio" preload="metadata" style="display: none;"></audio>
         </div>
     </div>
+    </main>
 </div>
 <div class="drawer-overlay" id="drawerOverlay">
     <div class="drawer">
@@ -1222,7 +1277,7 @@ const initialGroupId = {{ initial_group_id | default(0) or 0 }};
 const joinError = {% if join_error %}{{ join_error | tojson }}{% else %}null{% endif %};
 
 const backBtn = document.getElementById('backBtn');
-const headerTitle = document.getElementById('headerTitle');
+const headerTitle = document.getElementById('chatHeaderTitle');
 const headerActions = document.getElementById('headerActions');
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const drawerOverlay = document.getElementById('drawerOverlay');
@@ -1468,8 +1523,13 @@ function openDrawer() {
 function closeDrawer() {
     if (drawerOverlay) drawerOverlay.classList.remove('open');
 }
+var tgApp = document.getElementById('tgApp');
+var tgSidebar = document.getElementById('tgSidebar');
+var tgMain = document.getElementById('tgMain');
 function showView(mode) {
     viewMode = mode;
+    if (tgSidebar) tgSidebar.classList.toggle('hidden-mobile', mode === 'chat' || mode === 'group');
+    if (tgMain) tgMain.classList.toggle('has-chat', mode === 'chat' || mode === 'group');
     if (chatPlaceholder) chatPlaceholder.style.display = (mode === 'list') ? 'flex' : 'none';
     if (chatActive) {
         if (mode === 'chat' || mode === 'group') {
@@ -1489,21 +1549,16 @@ function showView(mode) {
             settingsPanel.style.display = 'none';
         }
     }
-    if (hamburgerBtn) {
-        hamburgerBtn.classList.toggle('hidden', mode === 'chat' || mode === 'group');
-    }
-    if (backBtn) {
-        backBtn.classList.toggle('visible', mode === 'chat' || mode === 'settings' || mode === 'group');
-    }
+    if (backBtn) backBtn.classList.toggle('visible', mode === 'chat' || mode === 'settings' || mode === 'group');
     if (headerTitle) {
         if (mode === 'list') headerTitle.textContent = 'مسنجر';
         else if (mode === 'settings') headerTitle.textContent = 'تنظیمات';
         else if (mode === 'chat' && currentOtherName) headerTitle.textContent = currentOtherName;
         else if (mode === 'group' && currentGroupName) headerTitle.textContent = currentGroupName;
     }
-    var isGroup = (mode === 'group');
-    if (chatHeaderActions1) chatHeaderActions1.style.display = isGroup ? 'none' : 'flex';
-    if (chatHeaderActionsGroup) chatHeaderActionsGroup.style.display = isGroup ? 'flex' : 'none';
+    var isChatOrGroup = (mode === 'chat' || mode === 'group');
+    if (chatHeaderActions1) chatHeaderActions1.style.display = (mode === 'chat') ? 'flex' : 'none';
+    if (chatHeaderActionsGroup) chatHeaderActionsGroup.style.display = (mode === 'group') ? 'flex' : 'none';
     if (chatSearchInChat) chatSearchInChat.classList.remove('visible');
 }
 
@@ -1813,12 +1868,13 @@ function loadConversations(q) {
                 var safeTime = escapeHtml(c.last_at || '');
                 var isActive = (c.other_id === currentOtherId);
                 var initial = rawName.charAt(0).toUpperCase() || '?';
-                return '<li class="history-item' + (isActive ? ' active' : '') + '" data-id="' + c.other_id + '" data-name="' + safeName + '" style="animation-delay:' + (i * 0.03) + 's">' +
+                var shortTime = (c.last_at || '').toString().trim();
+                if (shortTime.length > 16) shortTime = shortTime.slice(11, 16);
+                return '<li class="history-item' + (isActive ? ' active' : '') + '" data-id="' + c.other_id + '" data-name="' + safeName + '">' +
                     '<div class="h-avatar">' + escapeHtml(initial) + '</div>' +
                     '<div class="h-body">' +
-                    '<div class="h-username">' + safeName + '</div>' +
-                    '<div class="h-preview">' + safePreview + '</div>' +
-                    '<div class="h-time">' + safeTime + '</div></div>' +
+                    '<div class="h-top"><span class="h-username">' + safeName + '</span><span class="h-time">' + escapeHtml(shortTime) + '</span></div>' +
+                    '<div class="h-preview">' + safePreview + '</div></div>' +
                     '<button type="button" class="h-delete" data-id="' + c.other_id + '" title="حذف گفتگو">🗑</button></li>';
             }).join('');
             historyList.querySelectorAll('.history-item').forEach(function(el) {
@@ -1931,8 +1987,24 @@ function buildGroupMessageHtml(m, senders) {
     }
     if (m.body) parts.push(escapeHtml(m.body));
     if (parts.length === 0) parts.push('[پیام]');
-    parts.push('<time>' + escapeHtml(m.created_at) + '</time>');
+    var timeStr = (m.created_at || '').toString().trim();
+    if (timeStr.length > 16) timeStr = timeStr.slice(11, 16);
+    parts.push('<div class="msg-meta"><time>' + escapeHtml(timeStr) + '</time></div>');
     return '<div class="msg ' + cls + '" data-msg-id="' + (m.id || '') + '">' + parts.join('') + '</div>';
+}
+function buildGroupMessagesWithDateSep(messages, senders) {
+    var out = [];
+    var lastDate = '';
+    for (var i = 0; i < messages.length; i++) {
+        var m = messages[i];
+        var dateKey = (m.created_at || '').toString().trim().slice(0, 10);
+        if (dateKey && dateKey !== lastDate) {
+            lastDate = dateKey;
+            out.push('<div class="msg-date-sep"><span>' + escapeHtml(formatDateSep(dateKey)) + '</span></div>');
+        }
+        out.push(buildGroupMessageHtml(m, senders));
+    }
+    return out.join('');
 }
 
 var lastGroupMessageCount = 0;
@@ -1955,7 +2027,7 @@ function loadGroupChat(isPolling) {
             if (sameContent) return;
             lastGroupMessageCount = messages.length;
             lastGroupLastId = maxId;
-            chatMessages.innerHTML = messages.map(function(m) { return buildGroupMessageHtml(m, senders); }).join('');
+            chatMessages.innerHTML = buildGroupMessagesWithDateSep(messages, senders);
             initVoiceBubbles();
             chatMessages.querySelectorAll('.msg-del').forEach(function(btn) {
                 btn.addEventListener('click', function() {
@@ -1977,8 +2049,8 @@ function loadGroupChat(isPolling) {
         });
 }
 
-if (convoSearchBtn && convoSearch) {
-    convoSearchBtn.addEventListener('click', function() { loadConversations(convoSearch.value.trim()); });
+if (convoSearch) {
+    convoSearch.addEventListener('input', function() { loadConversations(convoSearch.value.trim()); });
     convoSearch.addEventListener('keydown', function(e) { if (e.key === 'Enter') loadConversations(convoSearch.value.trim()); });
 }
 
@@ -2290,11 +2362,37 @@ function buildMessageHtml(m, otherReadUpTo) {
     if (parts.length === 0) {
         parts.push('[پیام]');
     }
-    parts.push('<time>' + escapeHtml(m.created_at) + '</time>');
+    var timeStr = (m.created_at || '').toString().trim();
+    if (timeStr.length > 16) timeStr = timeStr.slice(11, 16);
+    var meta = '<div class="msg-meta"><time>' + escapeHtml(timeStr) + '</time>';
     if (sent && otherReadUpTo != null && m.id <= otherReadUpTo) {
-        parts.push('<span class="msg-read">✓✓</span>');
+        meta += '<span class="msg-read">✓✓</span>';
     }
+    meta += '</div>';
+    parts.push(meta);
     return '<div class="msg ' + cls + '" data-msg-id="' + (m.id || '') + '">' + parts.join('') + '</div>';
+}
+function formatDateSep(dateKey) {
+    if (!dateKey) return '';
+    var today = new Date().toISOString().slice(0, 10);
+    var yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    if (dateKey === today) return 'امروز';
+    if (dateKey === yesterday) return 'دیروز';
+    return dateKey;
+}
+function buildChatMessagesWithDateSep(messages, otherReadUpTo) {
+    var out = [];
+    var lastDate = '';
+    for (var i = 0; i < messages.length; i++) {
+        var m = messages[i];
+        var dateKey = (m.created_at || '').toString().trim().slice(0, 10);
+        if (dateKey && dateKey !== lastDate) {
+            lastDate = dateKey;
+            out.push('<div class="msg-date-sep"><span>' + escapeHtml(formatDateSep(dateKey)) + '</span></div>');
+        }
+        out.push(buildMessageHtml(m, otherReadUpTo));
+    }
+    return out.join('');
 }
 
 function loadChat(isPolling) {
@@ -2331,7 +2429,7 @@ function loadChat(isPolling) {
             }
             var otherReadUpTo = data.other_read_up_to != null ? data.other_read_up_to : null;
             var messages = prepareE2eeMessages(data.messages, data.public_keys || {});
-            chatMessages.innerHTML = messages.map(function(m) { return buildMessageHtml(m, otherReadUpTo); }).join('');
+            chatMessages.innerHTML = buildChatMessagesWithDateSep(messages, otherReadUpTo);
             initVoiceBubbles();
             chatMessages.querySelectorAll('.msg-del').forEach(function(btn) {
                 btn.addEventListener('click', function() {
