@@ -517,6 +517,7 @@
     <header class="msg-header">
         <button type="button" class="btn btn-ghost back-btn" id="backBtn" aria-label="بازگشت">←</button>
         <span class="title" id="headerTitle">مسنجر — {{ username }}</span>
+        <button type="button" class="btn btn-ghost header-link" id="btnNotify" title="نوتیفیکیشن پیام‌ها">🔔</button>
         <a href="{{ url_for('user_change_password') }}" class="btn btn-ghost header-link" title="تغییر رمز عبور">تغییر رمز</a>
         <a href="{{ url_for('logout') }}" class="btn btn-ghost header-link" title="خروج از حساب">خروج</a>
     </header>
@@ -635,6 +636,7 @@ const convoSearch = document.getElementById('convoSearch');
 const convoSearchBtn = document.getElementById('convoSearchBtn');
 const chatHeaderTitle = document.getElementById('chatHeaderTitle');
 const blockBtn = document.getElementById('blockBtn');
+const btnNotify = document.getElementById('btnNotify');
 
 let currentOtherId = null;
 let currentOtherName = null;
@@ -649,6 +651,8 @@ let voiceRecordingTimer = null;
 let voiceRecordingCancelled = false;
 var chatPollInterval = null;
 const MIC_PERMISSION_KEY = 'mic_permission_requested';
+var lastChatMessageCount = 0;
+var lastChatLastId = 0;
 
 function stopChatPoll() {
     if (chatPollInterval) {
@@ -959,6 +963,8 @@ function loadConversations(q) {
                     var name = el.getAttribute('data-name') || '';
                     currentOtherId = id;
                     currentOtherName = name;
+                    lastChatMessageCount = 0;
+                    lastChatLastId = 0;
                     chatPlaceholder.style.display = 'none';
                     chatActive.classList.add('visible');
                     if (chatHeaderTitle) chatHeaderTitle.textContent = 'گفتگو با ' + name;
@@ -991,6 +997,8 @@ backBtn.addEventListener('click', function() {
     backBtn.classList.remove('visible');
     currentOtherId = null;
     currentOtherName = null;
+    lastChatMessageCount = 0;
+    lastChatLastId = 0;
     selectedFile = null;
     filePreview.textContent = '';
     fileInput.value = '';
@@ -1015,6 +1023,8 @@ btnOpenChat.addEventListener('click', async function() {
         }
         currentOtherId = data.id;
         currentOtherName = data.username;
+        lastChatMessageCount = 0;
+        lastChatLastId = 0;
         chatPlaceholder.style.display = 'none';
         chatActive.classList.add('visible');
         if (chatHeaderTitle) chatHeaderTitle.textContent = 'گفتگو با ' + currentOtherName;
@@ -1117,6 +1127,22 @@ function loadChat(isPolling) {
                 if (!isPolling) chatMessages.innerHTML = '<p class="error">' + escapeHtml(data.error) + '</p>';
                 return;
             }
+            var maxId = 0;
+            data.messages.forEach(function(m) { if (m.id > maxId) maxId = m.id; });
+            var sameContent = isPolling && data.messages.length === lastChatMessageCount && maxId === lastChatLastId;
+            if (sameContent) {
+                if (maxId > 0) {
+                    fetch('/api/chat/' + currentOtherId, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                        body: JSON.stringify({ read_receipt: true, last_read_message_id: maxId })
+                    });
+                }
+                return;
+            }
+            var prevLastId = lastChatLastId;
+            lastChatMessageCount = data.messages.length;
+            lastChatLastId = maxId;
             iBlockedThem = data.i_blocked_them || false;
             if (blockBtn) {
                 blockBtn.style.display = 'inline-flex';
@@ -1141,14 +1167,33 @@ function loadChat(isPolling) {
                 });
             });
             if (wasAtBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
-            var maxId = 0;
-            data.messages.forEach(function(m) { if (m.id > maxId) maxId = m.id; });
             if (maxId > 0) {
                 fetch('/api/chat/' + currentOtherId, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                     body: JSON.stringify({ read_receipt: true, last_read_message_id: maxId })
                 });
+            }
+            if (isPolling && prevLastId > 0 && typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) {
+                var newReceived = data.messages.filter(function(m) { return m.id > prevLastId && m.sender_id !== userId; });
+                if (newReceived.length > 0) {
+                    var fromName = (currentOtherName && currentOtherName.length > 0) ? currentOtherName : 'فرستنده';
+                    var bodyText;
+                    if (newReceived.length === 1) {
+                        var msg = newReceived[0];
+                        if (msg.message_type === 'image') bodyText = 'عکس';
+                        else if (msg.message_type === 'voice') bodyText = 'ویس';
+                        else if (msg.message_type === 'file') bodyText = 'فایل';
+                        else bodyText = (msg.body || '').trim().slice(0, 60) || 'پیام';
+                        if ((msg.body || '').length > 60) bodyText += '…';
+                    } else {
+                        bodyText = newReceived.length + ' پیام جدید';
+                    }
+                    try {
+                        var n = new Notification('پیام جدید از ' + fromName, { body: bodyText, dir: 'rtl', tag: 'msg-' + currentOtherId });
+                        n.onclick = function() { window.focus(); n.close(); };
+                    } catch (e) {}
+                }
             }
             if (!isPolling) startChatPoll();
         });
@@ -1167,6 +1212,27 @@ if (blockBtn) {
                 blockBtn.textContent = iBlockedThem ? 'رفع مسدودیت' : 'مسدود کردن';
                 showToast(iBlockedThem ? 'مسدود شد.' : 'رفع مسدودیت شد.');
             } else { showToast(res.error || 'خطا'); }
+        });
+    });
+}
+
+if (btnNotify) {
+    btnNotify.addEventListener('click', function() {
+        if (typeof Notification === 'undefined') {
+            showToast('نوتیفیکیشن در این مرورگر پشتیبانی نمیشه');
+            return;
+        }
+        if (Notification.permission === 'granted') {
+            showToast('نوتیفیکیشن از قبل فعال است');
+            return;
+        }
+        if (Notification.permission === 'denied') {
+            showToast('نوتیفیکیشن مسدود شده. از تنظیمات مرورگر اجازه دهید.');
+            return;
+        }
+        Notification.requestPermission().then(function(p) {
+            if (p === 'granted') showToast('نوتیفیکیشن فعال شد');
+            else if (p === 'denied') showToast('اجازه نوتیفیکیشن داده نشد');
         });
     });
 }
