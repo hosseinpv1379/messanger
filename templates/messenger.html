@@ -53,10 +53,42 @@
 .chat-placeholder {
     flex: 1;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+.chat-placeholder .history-section {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem 1rem;
+    -webkit-overflow-scrolling: touch;
+}
+.chat-placeholder .history-title {
+    font-weight: 600;
+    font-size: 0.9rem;
     color: var(--text-soft);
-    padding: 2rem;
+    margin-bottom: 0.5rem;
+    padding: 0.25rem 0;
+}
+.chat-placeholder .history-list { list-style: none; margin: 0; padding: 0; }
+.chat-placeholder .history-item {
+    display: block;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.35rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    text-align: right;
+    transition: background 0.15s;
+}
+.chat-placeholder .history-item:hover { background: var(--surface-hover); }
+.chat-placeholder .history-item .h-username { font-weight: 600; margin-bottom: 0.2rem; }
+.chat-placeholder .history-item .h-preview { font-size: 0.85rem; color: var(--text-soft); }
+.chat-placeholder .history-item .h-time { font-size: 0.75rem; color: var(--text-soft); margin-top: 0.25rem; }
+.chat-placeholder .history-empty {
+    color: var(--text-soft);
+    padding: 2rem 1rem;
     text-align: center;
     line-height: 1.7;
 }
@@ -162,9 +194,13 @@
     </div>
     <div class="chat-body">
         <div class="chat-placeholder" id="chatPlaceholder">
-            نام کاربری طرف مقابل را وارد کنید (مثل تلگرام).<br>
-            عکس و فایل هم می‌توانید بفرستید.
-        </div>
+            <div class="history-section">
+                <div class="history-title">گفتگوهای اخیر</div>
+                <ul class="history-list" id="historyList"></ul>
+                <div class="history-empty" id="historyEmpty" style="display: none;">
+                    هنوز گفتگویی ندارید. نام کاربری طرف را پایین وارد کنید و چت جدید باز کنید.
+                </div>
+            </div>
         <div class="chat-active" id="chatActive">
             <div class="chat-with" id="chatHeader"></div>
             <div class="chat-messages" id="chatMessages"></div>
@@ -203,6 +239,8 @@ const btnAttach = document.getElementById('btnAttach');
 const fileInput = document.getElementById('fileInput');
 const filePreview = document.getElementById('filePreview');
 const toastEl = document.getElementById('toast');
+const historyList = document.getElementById('historyList');
+const historyEmpty = document.getElementById('historyEmpty');
 
 let currentOtherId = null;
 let currentOtherName = null;
@@ -236,6 +274,40 @@ fileInput.addEventListener('change', function() {
     filePreview.textContent = selectedFile ? selectedFile.name : '';
 });
 
+function loadConversations() {
+    fetch('/api/conversations')
+        .then(function(r) { return r.json(); })
+        .then(function(list) {
+            if (!list || list.length === 0) {
+                historyList.innerHTML = '';
+                historyEmpty.style.display = 'block';
+                return;
+            }
+            historyEmpty.style.display = 'none';
+            historyList.innerHTML = list.map(function(c) {
+                var safeName = escapeHtml(c.other_username);
+                return '<li class="history-item" data-id="' + c.other_id + '" data-name="' + safeName + '">' +
+                    '<div class="h-username">' + safeName + '</div>' +
+                    '<div class="h-preview">' + escapeHtml(c.last_preview) + '</div>' +
+                    '<div class="h-time">' + escapeHtml(c.last_at) + '</div></li>';
+            }).join('');
+            historyList.querySelectorAll('.history-item').forEach(function(el) {
+                el.addEventListener('click', function() {
+                    var id = parseInt(el.getAttribute('data-id'), 10);
+                    var name = el.getAttribute('data-name');
+                    currentOtherId = id;
+                    currentOtherName = name;
+                    chatPlaceholder.style.display = 'none';
+                    chatActive.classList.add('visible');
+                    chatHeader.textContent = 'گفتگو با ' + name;
+                    backBtn.classList.add('visible');
+                    headerTitle.textContent = name;
+                    loadChat();
+                });
+            });
+        });
+}
+
 backBtn.addEventListener('click', function() {
     chatActive.classList.remove('visible');
     chatPlaceholder.style.display = 'flex';
@@ -247,6 +319,7 @@ backBtn.addEventListener('click', function() {
     filePreview.textContent = '';
     fileInput.value = '';
     showOpenError('');
+    loadConversations();
 });
 
 btnOpenChat.addEventListener('click', async function() {
@@ -272,6 +345,7 @@ btnOpenChat.addEventListener('click', async function() {
         backBtn.classList.add('visible');
         headerTitle.textContent = currentOtherName;
         loadChat();
+        loadConversations();
     } finally {
         setLoading(false);
     }
@@ -309,6 +383,8 @@ function loadChat() {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         });
 }
+
+loadConversations();
 
 chatForm.addEventListener('submit', async function(e) {
     e.preventDefault();

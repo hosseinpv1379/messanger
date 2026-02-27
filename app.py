@@ -74,6 +74,7 @@ def login():
         if db.admin_verify(username, password):
             session.clear()
             session["admin"] = True
+            session["admin_username"] = username
             session["csrf_token"] = security.csrf_token(session)
             return redirect(url_for("admin_panel"))
     else:
@@ -126,6 +127,38 @@ def admin_add_user():
     )
 
 
+@app.route("/admin/change-password", methods=["POST"])
+@admin_required
+def admin_change_password():
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return redirect(url_for("admin_panel"))
+    admin_username = session.get("admin_username")
+    current = (request.form.get("current_password") or "")[: config.MAX_PASSWORD_LEN]
+    new_pw = (request.form.get("new_password") or "")[: config.MAX_PASSWORD_LEN]
+    confirm = (request.form.get("confirm_password") or "")[: config.MAX_PASSWORD_LEN]
+    if new_pw != confirm:
+        return render_template(
+            "admin.html",
+            users=db.user_list(),
+            change_password_error="رمز جدید و تکرار آن یکسان نیستند.",
+            csrf_token=security.csrf_token(session),
+        )
+    ok, msg = db.admin_update_password(admin_username, current, new_pw)
+    if ok:
+        return render_template(
+            "admin.html",
+            users=db.user_list(),
+            change_password_ok=True,
+            csrf_token=security.csrf_token(session),
+        )
+    return render_template(
+        "admin.html",
+        users=db.user_list(),
+        change_password_error=msg,
+        csrf_token=security.csrf_token(session),
+    )
+
+
 @app.route("/messenger")
 @user_required
 def messenger():
@@ -135,6 +168,15 @@ def messenger():
         user_id=session.get("user_id"),
         csrf_token=security.csrf_token(session),
     )
+
+
+@app.route("/api/conversations")
+@user_required
+def api_conversations():
+    """لیست گفتگوهای اخیر (هیستوری چت) برای نمایش به کاربر."""
+    uid = session["user_id"]
+    convos = db.get_conversations(uid)
+    return jsonify(convos)
 
 
 @app.route("/api/user-by-username/<username>")
