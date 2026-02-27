@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" id="metaThemeColor" content="#0f172a">
+    <meta name="theme-color" id="metaThemeColor" content="#0E1621">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script>
         (function() {
@@ -17,67 +17,67 @@
     <title>{% block title %}مسنجر{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
     <style>
+        /* پالت تلگرام — یکسان در همهٔ صفحات */
         :root {
-            --bg: #0c1222;
-            --bg-grad: linear-gradient(165deg, #0c1222 0%, #1a2332 40%, #0f172a 100%);
-            --bg-soft: #1e293b;
-            --surface: #1e293b;
-            --surface-hover: #334155;
-            --border: rgba(71, 85, 105, 0.5);
-            --text: #f1f5f9;
-            --text-soft: #94a3b8;
-            --accent: #06b6d4;
-            --accent-hover: #22d3ee;
-            --accent-glow: rgba(6, 182, 212, 0.3);
-            --accent-dim: rgba(6, 182, 212, 0.12);
+            --bg: #0E1621;
+            --bg-grad: #0E1621;
+            --bg-soft: #17212B;
+            --surface: #17212B;
+            --surface-hover: #242F3D;
+            --border: rgba(255,255,255,0.06);
+            --text: #FFFFFF;
+            --text-soft: #708499;
+            --accent: #2AABEE;
+            --accent-hover: #229ED9;
+            --accent-glow: rgba(42, 171, 238, 0.25);
+            --accent-dim: rgba(42, 171, 238, 0.12);
             --danger: #ef4444;
-            --success: #10b981;
-            --radius: 16px;
-            --radius-sm: 12px;
+            --success: #4ade80;
+            --radius: 12px;
+            --radius-sm: 10px;
             --radius-pill: 999px;
-            --shadow: 0 12px 48px rgba(0,0,0,0.35);
-            --shadow-sm: 0 2px 12px rgba(0,0,0,0.2);
+            --shadow: 0 8px 32px rgba(0,0,0,0.4);
+            --shadow-sm: 0 1px 4px rgba(0,0,0,0.2);
             --safe-top: env(safe-area-inset-top, 0);
             --safe-bottom: env(safe-area-inset-bottom, 0);
-            --ease: cubic-bezier(0.4, 0, 0.2, 1);
-            --transition: 0.25s var(--ease);
-            --card-bg: rgba(30, 41, 59, 0.88);
-            --card-border: 1px solid rgba(71, 85, 105, 0.45);
+            --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+            --transition: 0.2s var(--ease);
+            --card-bg: #17212B;
+            --card-border: 1px solid rgba(255,255,255,0.06);
         }
         html.theme-light {
-            --bg: #f1f5f9;
-            --bg-grad: linear-gradient(165deg, #e2e8f0 0%, #f1f5f9 50%, #f8fafc 100%);
-            --bg-soft: #e2e8f0;
-            --surface: #e2e8f0;
-            --surface-hover: #cbd5e1;
-            --border: rgba(100, 116, 139, 0.4);
-            --text: #0f172a;
-            --text-soft: #475569;
-            --accent: #0891b2;
-            --accent-hover: #0e7490;
-            --accent-glow: rgba(8, 145, 178, 0.25);
-            --accent-dim: rgba(8, 145, 178, 0.12);
-            --danger: #dc2626;
-            --success: #059669;
-            --shadow: 0 12px 48px rgba(0,0,0,0.12);
-            --shadow-sm: 0 2px 12px rgba(0,0,0,0.08);
-            --card-bg: rgba(255, 255, 255, 0.95);
-            --card-border: 1px solid rgba(148, 163, 184, 0.4);
+            --bg: #f4f4f5;
+            --bg-grad: #f4f4f5;
+            --bg-soft: #FFFFFF;
+            --surface: #FFFFFF;
+            --surface-hover: #e8e8e8;
+            --border: rgba(0,0,0,0.08);
+            --text: #000000;
+            --text-soft: #707579;
+            --accent: #3390EC;
+            --accent-hover: #2481CC;
+            --accent-glow: rgba(51, 144, 236, 0.2);
+            --accent-dim: rgba(51, 144, 236, 0.1);
+            --danger: #e53935;
+            --success: #43b581;
+            --shadow: 0 8px 32px rgba(0,0,0,0.12);
+            --shadow-sm: 0 1px 4px rgba(0,0,0,0.08);
+            --card-bg: #FFFFFF;
+            --card-border: 1px solid rgba(0,0,0,0.08);
         }
         * { box-sizing: border-box; }
         html { -webkit-tap-highlight-color: transparent; scroll-behavior: smooth; }
         body {
-            font-family: Vazirmatn, sans-serif;
-            background: var(--bg-grad);
-            background-attachment: fixed;
+            font-family: Vazirmatn, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
             color: var(--text);
             margin: 0;
             min-height: 100vh;
             min-height: 100dvh;
-            line-height: 1.6;
+            line-height: 1.5;
             padding-top: var(--safe-top);
             padding-bottom: var(--safe-bottom);
-            transition: opacity 0.3s var(--ease);
+            transition: opacity 0.2s var(--ease);
         }
         body.page-enter { animation: pageIn 0.4s var(--ease) forwards; }
         @keyframes pageIn {
@@ -104,7 +104,7 @@
             font-weight: 600;
             transition: background var(--transition), transform 0.15s var(--ease), box-shadow var(--transition);
         }
-        .btn:hover { background: var(--accent-hover); box-shadow: 0 0 24px var(--accent-glow); }
+        .btn:hover { background: var(--accent-hover); }
         .btn:active { transform: scale(0.98); }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
@@ -140,32 +140,29 @@
         }
         .page-card {
             width: 100%;
-            max-width: 420px;
+            max-width: 400px;
             background: var(--card-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border-radius: 24px;
-            padding: 2.5rem;
-            box-shadow: var(--shadow), 0 0 0 1px rgba(255,255,255,0.04);
+            border-radius: 16px;
+            padding: 2rem 2.25rem;
+            box-shadow: var(--shadow);
             border: var(--card-border);
-            animation: cardIn 0.45s var(--ease) forwards;
+            animation: cardIn 0.35s var(--ease) forwards;
             opacity: 0;
-            transform: translateY(16px);
+            transform: translateY(12px);
         }
         @keyframes cardIn {
             to { opacity: 1; transform: translateY(0); }
         }
         .page-card .card-logo {
-            width: 56px;
-            height: 56px;
-            margin: 0 auto 1.25rem;
-            background: linear-gradient(135deg, var(--accent), #22d3ee);
-            border-radius: 16px;
+            width: 52px;
+            height: 52px;
+            margin: 0 auto 1rem;
+            background: var(--accent);
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.75rem;
-            box-shadow: 0 8px 24px var(--accent-glow);
+            font-size: 1.6rem;
         }
         .page-card h1 { margin: 0 0 0.5rem 0; font-size: 1.5rem; font-weight: 700; text-align: center; letter-spacing: -0.02em; }
         .page-card .sub { text-align: center; color: var(--text-soft); font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.5; }
