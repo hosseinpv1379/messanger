@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import base64
 import uuid
 from pathlib import Path
 from flask import Flask, request, redirect, url_for, session, render_template, jsonify, send_file
@@ -47,6 +48,19 @@ def user_required(f):
             return redirect(url_for("login"))
         return f(*a, **k)
     return inner
+
+
+# 1x1 transparent PNG so /favicon.ico and apple-touch-icon don't 404
+_FAVICON_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+)
+
+
+@app.route("/favicon.ico")
+@app.route("/apple-touch-icon.png")
+@app.route("/apple-touch-icon-precomposed.png")
+def favicon():
+    return send_file(BytesIO(_FAVICON_PNG), mimetype="image/png")
 
 
 @app.route("/")
