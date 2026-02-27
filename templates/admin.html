@@ -7,25 +7,51 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 1rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.75rem;
 }
-.admin-header h1 { margin: 0; font-size: 1.35rem; }
+.admin-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
 .admin-stats {
     display: flex;
-    gap: 1.5rem;
+    gap: 1rem;
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
 }
-.admin-stats span { color: var(--text-soft); }
-.admin-stats strong { color: var(--accent); }
-.card {
-    background: var(--surface);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid var(--border);
+.admin-stats .stat-pill {
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    padding: 0.75rem 1.25rem;
+    border-radius: 14px;
+    font-size: 0.95rem;
+    transition: all var(--transition);
 }
-.card h2 { margin: 0 0 1rem 0; font-size: 1.1rem; }
+.admin-stats .stat-pill:hover {
+    background: rgba(6, 182, 212, 0.15);
+    border-color: rgba(6, 182, 212, 0.4);
+}
+.admin-stats .stat-pill span { color: var(--text-soft); }
+.admin-stats .stat-pill strong { color: var(--accent); font-size: 1.15rem; margin-right: 0.35rem; }
+.card {
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(12px);
+    border-radius: 20px;
+    padding: 1.75rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    transition: box-shadow var(--transition), border-color var(--transition);
+}
+.card:hover { border-color: rgba(71, 85, 105, 0.6); box-shadow: 0 8px 32px rgba(0,0,0,0.25); }
+.card h2 {
+    margin: 0 0 1.25rem 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text);
+}
 .add-form {
     display: grid;
     gap: 1rem;
@@ -35,38 +61,63 @@
     .add-form { grid-template-columns: 1fr; }
     .add-form .btn { width: 100%; }
 }
-.search-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-.search-form input { flex: 1; max-width: 280px; }
+.search-form {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+}
+.search-form input {
+    flex: 1;
+    max-width: 300px;
+    margin: 0;
+    border-radius: var(--radius-pill);
+    padding: 0.6rem 1.1rem;
+}
 .users-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.95rem;
+    border-radius: 14px;
+    overflow: hidden;
 }
 .users-table th, .users-table td {
-    padding: 0.75rem 1rem;
+    padding: 0.85rem 1.1rem;
     text-align: right;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+    transition: background var(--transition);
 }
+.users-table tbody tr:hover td { background: rgba(6, 182, 212, 0.06); }
 .users-table th {
-    background: var(--bg-soft);
-    font-weight: 600;
+    background: rgba(15, 23, 42, 0.6);
+    font-weight: 700;
     color: var(--text-soft);
+    font-size: 0.9rem;
 }
 .users-table tr:last-child td { border-bottom: none; }
 .users-table .date-cell { color: var(--text-soft); font-size: 0.9rem; }
-.users-table .banned { color: var(--danger); font-size: 0.85rem; }
-.users-table .actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-.users-table .actions form { display: inline; }
-.users-table .actions .btn { padding: 0.35rem 0.6rem; font-size: 0.8rem; }
-@media (max-width: 500px) {
-    .users-table th, .users-table td { padding: 0.6rem; font-size: 0.9rem; }
+.users-table .banned { color: var(--danger); font-size: 0.85rem; font-weight: 600; }
+.users-table .actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
 }
-.users-empty { color: var(--text-soft); padding: 1rem 0; }
-.password-form { display: flex; flex-direction: column; gap: 1rem; max-width: 360px; }
+.users-table .actions form { display: inline; }
+.users-table .actions .btn {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.8rem;
+    border-radius: 10px;
+    transition: transform 0.15s var(--ease);
+}
+.users-table .actions .btn:hover { transform: scale(1.03); }
+@media (max-width: 500px) {
+    .users-table th, .users-table td { padding: 0.65rem; font-size: 0.88rem; }
+}
+.users-empty { color: var(--text-soft); padding: 1.25rem 0; line-height: 1.6; }
+.password-form { display: flex; flex-direction: column; gap: 1.1rem; max-width: 380px; }
 .password-form .btn { align-self: flex-start; }
-.success-msg { color: var(--accent); margin-bottom: 0.5rem; }
-.reset-inline { display: flex; gap: 0.35rem; align-items: center; margin-top: 0.25rem; }
-.reset-inline input { width: 120px; margin: 0; }
+.success-msg { color: var(--success); margin-bottom: 0.5rem; font-weight: 600; }
+.reset-inline { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.35rem; flex-wrap: wrap; }
+.reset-inline input { width: 130px; margin: 0; border-radius: 10px; padding: 0.5rem 0.75rem; }
 {% endblock %}
 {% block body %}
 <div class="container">
@@ -76,8 +127,8 @@
     </header>
     {% if stats %}
     <div class="admin-stats">
-        <span>کاربران: <strong>{{ stats.users_count }}</strong></span>
-        <span>پیام‌ها: <strong>{{ stats.messages_count }}</strong></span>
+        <div class="stat-pill"><strong>{{ stats.users_count }}</strong><span>کاربر</span></div>
+        <div class="stat-pill"><strong>{{ stats.messages_count }}</strong><span>پیام</span></div>
     </div>
     {% endif %}
     <section class="card">
@@ -133,7 +184,7 @@
         <p class="error">ریست رمز: {{ reset_error }}</p>
         {% endif %}
         {% if users %}
-        <div style="overflow-x: auto;">
+        <div style="overflow-x: auto; border-radius: 14px; border: 1px solid rgba(71, 85, 105, 0.3);">
             <table class="users-table">
                 <thead>
                     <tr>
