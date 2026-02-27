@@ -1,0 +1,6 @@
+fernet.key
+messenger.db
+venv/
+__pycache__/
+*.pyc
+.env

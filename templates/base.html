@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0c0e12">
+    <title>{% block title %}مسنجر{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0c0e12;
+            --bg-soft: #13161d;
+            --surface: #1a1e28;
+            --surface-hover: #22262f;
+            --border: #2a2f3b;
+            --text: #e8eaed;
+            --text-soft: #9ca3af;
+            --accent: #0d9488;
+            --accent-hover: #0f766e;
+            --accent-dim: rgba(13, 148, 136, 0.2);
+            --danger: #dc2626;
+            --danger-dim: rgba(220, 38, 38, 0.15);
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.35);
+            --safe-top: env(safe-area-inset-top, 0);
+            --safe-bottom: env(safe-area-inset-bottom, 0);
+        }
+        * { box-sizing: border-box; }
+        html { -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: Vazirmatn, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            min-height: 100vh;
+            min-height: 100dvh;
+            line-height: 1.6;
+            padding-top: var(--safe-top);
+            padding-bottom: var(--safe-bottom);
+        }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .container { max-width: 720px; margin: 0 auto; padding: 1rem; padding-left: max(1rem, var(--safe-top)); padding-right: max(1rem, var(--safe-top)); }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            min-width: 44px;
+            padding: 0.65rem 1.25rem;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn:hover { background: var(--accent-hover); }
+        .btn:active { transform: scale(0.98); }
+        .btn-secondary { background: var(--border); color: var(--text); }
+        .btn-secondary:hover { background: var(--surface-hover); }
+        .btn-ghost { background: transparent; color: var(--text-soft); }
+        .btn-ghost:hover { background: var(--surface-hover); color: var(--text); }
+        .error { color: var(--danger); margin-top: 0.5rem; font-size: 0.9rem; }
+        input, textarea {
+            font-family: inherit;
+            font-size: 16px;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            color: var(--text);
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+        input::placeholder, textarea::placeholder { color: var(--text-soft); }
+        label { display: block; font-weight: 500; margin-bottom: 0.35rem; font-size: 0.9rem; }
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    {% block body %}{% endblock %}
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

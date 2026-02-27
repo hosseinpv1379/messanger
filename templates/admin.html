@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}پنل مدیریت — مسنجر{% endblock %}
+{% block extra_css %}
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.admin-header h1 { margin: 0; font-size: 1.35rem; }
+.card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+}
+.card h2 { margin: 0 0 1rem 0; font-size: 1.1rem; }
+.add-form {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr 1fr auto;
+}
+@media (max-width: 600px) {
+    .add-form { grid-template-columns: 1fr; }
+    .add-form .btn { width: 100%; }
+}
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+}
+.users-table th, .users-table td {
+    padding: 0.75rem 1rem;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+}
+.users-table th {
+    background: var(--bg-soft);
+    font-weight: 600;
+    color: var(--text-soft);
+}
+.users-table tr:last-child td { border-bottom: none; }
+.users-table .id-cell { font-variant-numeric: tabular-nums; color: var(--accent); }
+.users-table .date-cell { color: var(--text-soft); font-size: 0.9rem; }
+@media (max-width: 500px) {
+    .users-table th, .users-table td { padding: 0.6rem; font-size: 0.9rem; }
+}
+.users-empty { color: var(--text-soft); padding: 1rem 0; }
+{% endblock %}
+{% block body %}
+<div class="container">
+    <header class="admin-header">
+        <h1>پنل مدیریت</h1>
+        <a href="{{ url_for('logout') }}" class="btn btn-secondary">خروج</a>
+    </header>
+    <section class="card">
+        <h2>افزودن کاربر جدید</h2>
+        {% if add_error %}
+        <p class="error">{{ add_error }}</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('admin_add_user') }}" class="add-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div>
+                <label for="username">نام کاربری</label>
+                <input type="text" id="username" name="username" required placeholder="مثال: ali" maxlength="64">
+            </div>
+            <div>
+                <label for="password">رمز عبور</label>
+                <input type="password" id="password" name="password" required placeholder="حداقل ۴ کاراکتر" maxlength="128">
+            </div>
+            <button type="submit" class="btn">افزودن کاربر</button>
+        </form>
+    </section>
+    <section class="card">
+        <h2>کاربران</h2>
+        {% if users %}
+        <div style="overflow-x: auto;">
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>شناسه</th>
+                        <th>نام کاربری</th>
+                        <th>تاریخ ایجاد</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr>
+                        <td class="id-cell">{{ u.id }}</td>
+                        <td>{{ u.username }}</td>
+                        <td class="date-cell">{{ u.created_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p style="margin-top: 1rem; color: var(--text-soft); font-size: 0.85rem;">شناسه را به کاربر بدهید تا با دیگران چت کند.</p>
+        {% else %}
+        <p class="users-empty">هنوز کاربری ثبت نشده است. از فرم بالا کاربر اضافه کنید.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

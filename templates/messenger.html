@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}مسنجر — {{ username }}{% endblock %}
+{% block extra_css %}
+.messenger-page {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--safe-top) - var(--safe-bottom));
+    height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+    max-height: 800px;
+    margin: 0 auto;
+    max-width: 640px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+}
+.msg-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    padding-left: max(1rem, var(--safe-top));
+    padding-right: max(1rem, var(--safe-top));
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-soft);
+    min-height: 56px;
+}
+.msg-header .back-btn {
+    display: none;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+}
+.msg-header .back-btn.visible { display: inline-flex; }
+.msg-header .title { flex: 1; font-weight: 600; font-size: 1rem; }
+.open-chat-bar {
+    padding: 1rem;
+    padding-left: max(1rem, var(--safe-top));
+    padding-right: max(1rem, var(--safe-top));
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.open-chat-bar label { margin: 0; font-size: 0.9rem; }
+.open-chat-bar input[type="number"] { width: 100px; max-width: 120px; }
+.open-chat-bar .open-error { color: var(--danger); width: 100%; font-size: 0.85rem; margin-top: 0.25rem; }
+.chat-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.chat-placeholder {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-soft);
+    padding: 2rem;
+    text-align: center;
+    line-height: 1.7;
+}
+.chat-active { display: none; flex-direction: column; flex: 1; min-height: 0; }
+.chat-active.visible { display: flex; }
+.chat-with {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 0.95rem;
+    background: var(--bg-soft);
+}
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    -webkit-overflow-scrolling: touch;
+}
+.chat-messages .msg {
+    max-width: 85%;
+    padding: 0.6rem 0.9rem;
+    border-radius: 16px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+.chat-messages .msg.sent {
+    align-self: flex-end;
+    background: var(--accent);
+    color: #fff;
+    border-bottom-left-radius: 4px;
+}
+.chat-messages .msg.received {
+    align-self: flex-start;
+    background: var(--border);
+    border-bottom-right-radius: 4px;
+}
+.chat-messages .msg time {
+    font-size: 0.7rem;
+    opacity: 0.85;
+    display: block;
+    margin-top: 0.35rem;
+}
+.chat-form {
+    display: flex;
+    gap: 0.5rem;
+    padding: 1rem;
+    padding-left: max(1rem, var(--safe-top));
+    padding-right: max(1rem, var(--safe-bottom));
+    padding-bottom: max(1rem, var(--safe-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+}
+.chat-form input { flex: 1; min-width: 0; margin: 0; }
+.chat-form button { flex-shrink: 0; }
+.loading { opacity: 0.7; pointer-events: none; }
+.toast {
+    position: fixed;
+    bottom: max(1.5rem, calc(var(--safe-bottom) + 1rem));
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--danger);
+    color: #fff;
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    z-index: 100;
+    opacity: 0;
+    transition: transform 0.3s, opacity 0.3s;
+}
+.toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+{% endblock %}
+{% block body %}
+<div class="messenger-page container">
+    <header class="msg-header">
+        <button type="button" class="btn btn-ghost back-btn" id="backBtn" aria-label="بازگشت">←</button>
+        <span class="title" id="headerTitle">مسنجر — {{ username }}</span>
+    </header>
+    <div class="open-chat-bar">
+        <label for="otherId">شناسه کاربر:</label>
+        <input type="number" id="otherId" placeholder="مثلاً 2" min="1" step="1" inputmode="numeric">
+        <button type="button" class="btn" id="btnOpenChat">باز کردن چت</button>
+        <span class="open-error" id="openError"></span>
+    </div>
+    <div class="chat-body">
+        <div class="chat-placeholder" id="chatPlaceholder">
+            شناسه کاربری که می‌خواهید با او چت کنید را وارد کنید.<br>
+            فقط با کسی که شناسه‌اش را دارید می‌توانید گفتگو کنید.
+        </div>
+        <div class="chat-active" id="chatActive">
+            <div class="chat-with" id="chatHeader"></div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <form class="chat-form" id="chatForm">
+                <input type="text" id="msgInput" placeholder="پیام... (رمزنگاری می‌شود)" autocomplete="off" maxlength="4096">
+                <button type="submit" class="btn">ارسال</button>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="toast" id="toast" role="alert"></div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const userId = {{ user_id | default(0) }};
+const username = {{ username | tojson }};
+const csrfToken = {{ csrf_token | tojson }};
+
+const backBtn = document.getElementById('backBtn');
+const headerTitle = document.getElementById('headerTitle');
+const otherIdInput = document.getElementById('otherId');
+const btnOpenChat = document.getElementById('btnOpenChat');
+const openError = document.getElementById('openError');
+const chatPlaceholder = document.getElementById('chatPlaceholder');
+const chatActive = document.getElementById('chatActive');
+const chatHeader = document.getElementById('chatHeader');
+const chatMessages = document.getElementById('chatMessages');
+const chatForm = document.getElementById('chatForm');
+const msgInput = document.getElementById('msgInput');
+const toastEl = document.getElementById('toast');
+
+let currentOtherId = null;
+let currentOtherName = null;
+
+function showOpenError(msg) {
+    openError.textContent = msg || '';
+}
+
+function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(function() { toastEl.classList.remove('show'); }, 3000);
+}
+
+function setLoading(loading) {
+    btnOpenChat.disabled = loading;
+    if (loading) btnOpenChat.classList.add('loading');
+    else btnOpenChat.classList.remove('loading');
+}
+
+function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+}
+
+backBtn.addEventListener('click', function() {
+    chatActive.classList.remove('visible');
+    chatPlaceholder.style.display = 'flex';
+    headerTitle.textContent = 'مسنجر — ' + username;
+    backBtn.classList.remove('visible');
+    currentOtherId = null;
+    currentOtherName = null;
+    showOpenError('');
+});
+
+btnOpenChat.addEventListener('click', async function() {
+    const raw = otherIdInput.value.trim();
+    showOpenError('');
+    if (!raw) {
+        showOpenError('شناسه را وارد کنید.');
+        return;
+    }
+    const id = parseInt(raw, 10);
+    if (id !== id || id < 1) {
+        showOpenError('شناسه معتبر نیست.');
+        return;
+    }
+    if (id === userId) {
+        showOpenError('نمی‌توانید با خودتان چت کنید.');
+        return;
+    }
+    setLoading(true);
+    try {
+        const r = await fetch('/api/chat/' + id);
+        const data = await r.json();
+        if (r.status === 404 || data.error) {
+            showOpenError(data.error || 'کاربر یافت نشد.');
+            return;
+        }
+        currentOtherId = id;
+        currentOtherName = data.other.username;
+        chatPlaceholder.style.display = 'none';
+        chatActive.classList.add('visible');
+        chatHeader.textContent = 'گفتگو با ' + currentOtherName + ' (شناسه ' + id + ')';
+        backBtn.classList.add('visible');
+        headerTitle.textContent = currentOtherName;
+        loadChat();
+    } finally {
+        setLoading(false);
+    }
+});
+
+function loadChat() {
+    if (!currentOtherId) return;
+    fetch('/api/chat/' + currentOtherId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                chatMessages.innerHTML = '<p class="error">' + escapeHtml(data.error) + '</p>';
+                return;
+            }
+            chatMessages.innerHTML = data.messages.map(function(m) {
+                var sent = m.sender_id === userId;
+                return '<div class="msg ' + (sent ? 'sent' : 'received') + '">' + escapeHtml(m.body) + '<time>' + escapeHtml(m.created_at) + '</time></div>';
+            }).join('');
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        });
+}
+
+chatForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var body = msgInput.value.trim();
+    if (!body || !currentOtherId) return;
+    var btn = chatForm.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+        var r = await fetch('/api/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({ receiver_id: currentOtherId, body: body })
+        });
+        var res = await r.json();
+        if (res.ok) {
+            msgInput.value = '';
+            loadChat();
+        } else {
+            showToast(res.error || 'خطا در ارسال');
+        }
+    } finally {
+        btn.disabled = false;
+    }
+});
+</script>
+{% endblock %}
