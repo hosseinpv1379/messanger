@@ -25,7 +25,7 @@ def admin_required(f):
     @wraps(f)
     def inner(*a, **k):
         if session.get("admin") != True:
-            return redirect(url_for("login"))
+            return redirect(url_for("admin_login"))
         return f(*a, **k)
     return inner
 
@@ -49,10 +49,55 @@ def index():
     return redirect(url_for("login"))
 
 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    """ثبت‌نام کاربر جدید — هر کس می‌تواند حساب بسازد."""
+    if request.method == "GET":
+        if session.get("user_id"):
+            return redirect(url_for("messenger"))
+        if session.get("admin"):
+            return redirect(url_for("admin_panel"))
+        return render_template("register.html", csrf_token=security.csrf_token(session))
+    ip = security.get_client_ip()
+    if not security.rate_limit(f"register:{ip}", security.RATE_REGISTER_PER_MIN):
+        return render_template(
+            "register.html",
+            csrf_token=security.csrf_token(session),
+            error="تعداد درخواست زیاد است. کمی صبر کنید.",
+        ), 429
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return render_template(
+            "register.html",
+            csrf_token=security.csrf_token(session),
+            error="درخواست نامعتبر. دوباره تلاش کنید.",
+        ), 400
+    username = (request.form.get("username") or "").strip()[: config.MAX_USERNAME_LEN]
+    password = (request.form.get("password") or "")[: config.MAX_PASSWORD_LEN]
+    confirm = (request.form.get("confirm_password") or "")[: config.MAX_PASSWORD_LEN]
+    if password != confirm:
+        return render_template(
+            "register.html",
+            csrf_token=security.csrf_token(session),
+            error="رمز عبور و تکرار آن یکسان نیستند.",
+        )
+    ok, msg = db.user_add(username, password)
+    if ok:
+        return redirect(url_for("login", registered=1))
+    return render_template(
+        "register.html",
+        csrf_token=security.csrf_token(session),
+        error=msg,
+    )
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        return render_template("login.html", csrf_token=security.csrf_token(session))
+        return render_template(
+            "login.html",
+            csrf_token=security.csrf_token(session),
+            registered=request.args.get("registered") == "1",
+        )
     # محدودیت نرخ
     ip = security.get_client_ip()
     if not security.rate_limit(f"login:{ip}", security.RATE_LOGIN_PER_MIN):
@@ -69,22 +114,13 @@ def login():
         ), 400
     username = (request.form.get("username") or "").strip()[: config.MAX_USERNAME_LEN]
     password = (request.form.get("password") or "")[: config.MAX_PASSWORD_LEN]
-    as_admin = request.form.get("as_admin") == "1"
-    if as_admin:
-        if db.admin_verify(username, password):
-            session.clear()
-            session["admin"] = True
-            session["admin_username"] = username
-            session["csrf_token"] = security.csrf_token(session)
-            return redirect(url_for("admin_panel"))
-    else:
-        uid = db.user_verify(username, password)
-        if uid is not None:
-            session.clear()
-            session["user_id"] = uid
-            session["username"] = username
-            session["csrf_token"] = security.csrf_token(session)
-            return redirect(url_for("messenger"))
+    uid = db.user_verify(username, password)
+    if uid is not None:
+        session.clear()
+        session["user_id"] = uid
+        session["username"] = username
+        session["csrf_token"] = security.csrf_token(session)
+        return redirect(url_for("messenger"))
     return render_template(
         "login.html",
         csrf_token=security.csrf_token(session),
@@ -92,10 +128,46 @@ def login():
     )
 
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    """ورود مدیر — فقط از طریق این مسیر؛ در صفحهٔ ورود کاربران نمایش داده نمی‌شود."""
+    if request.method == "GET":
+        if session.get("admin"):
+            return redirect(url_for("admin_panel"))
+        return render_template("admin_login.html", csrf_token=security.csrf_token(session))
+    ip = security.get_client_ip()
+    if not security.rate_limit(f"admin_login:{ip}", security.RATE_LOGIN_PER_MIN):
+        return render_template(
+            "admin_login.html",
+            csrf_token=security.csrf_token(session),
+            error="تعداد تلاش‌های ورود زیاد است. یک دقیقه صبر کنید.",
+        ), 429
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return render_template(
+            "admin_login.html",
+            csrf_token=security.csrf_token(session),
+            error="درخواست نامعتبر. دوباره تلاش کنید.",
+        ), 400
+    username = (request.form.get("username") or "").strip()[: config.MAX_USERNAME_LEN]
+    password = (request.form.get("password") or "")[: config.MAX_PASSWORD_LEN]
+    if db.admin_verify(username, password):
+        session.clear()
+        session["admin"] = True
+        session["admin_username"] = username
+        session["csrf_token"] = security.csrf_token(session)
+        return redirect(url_for("admin_panel"))
+    return render_template(
+        "admin_login.html",
+        csrf_token=security.csrf_token(session),
+        error="نام کاربری یا رمز عبور اشتباه است.",
+    )
+
+
 @app.route("/logout")
 def logout():
+    was_admin = session.get("admin")
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("admin_login") if was_admin else url_for("login"))
 
 
 @app.route("/admin")

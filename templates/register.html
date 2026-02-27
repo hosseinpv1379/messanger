@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ورود — مسنجر{% endblock %}
+{% block title %}ثبت‌نام — مسنجر{% endblock %}
 {% block extra_css %}
 .login-wrap {
     min-height: calc(100vh - 2rem);
@@ -69,12 +69,6 @@
     opacity: 0.9;
 }
 .login-card .footer-note a { font-weight: 600; }
-.login-card .success {
-    color: var(--success);
-    font-size: 0.95rem;
-    margin-bottom: 0.5rem;
-    text-align: center;
-}
 {% if error %}
 .login-card .error { animation: shake 0.4s ease; }
 @keyframes shake {
@@ -87,23 +81,22 @@
 <div class="login-wrap">
     <div class="login-card">
         <div class="logo">💬</div>
-        <h1>ورود به مسنجر</h1>
-        <p class="sub">پیام‌ها رمزنگاری‌شده ذخیره می‌شوند</p>
-        {% if registered %}
-        <p class="success" role="status">ثبت‌نام با موفقیت انجام شد. وارد شوید.</p>
-        {% endif %}
+        <h1>ثبت‌نام</h1>
+        <p class="sub">یک حساب کاربری بسازید و شروع به چت کنید</p>
         {% if error %}
         <p class="error" role="alert">{{ error }}</p>
         {% endif %}
-        <form method="post" action="{{ url_for('login') }}">
+        <form method="post" action="{{ url_for('register') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label for="username">نام کاربری</label>
-            <input type="text" id="username" name="username" required autofocus autocomplete="username" maxlength="64" placeholder="نام کاربری را وارد کنید">
+            <input type="text" id="username" name="username" required autofocus autocomplete="username" maxlength="64" placeholder="حداقل ۲ کاراکتر">
             <label for="password">رمز عبور</label>
-            <input type="password" id="password" name="password" required autocomplete="current-password" maxlength="128" placeholder="رمز عبور">
-            <button type="submit" class="btn btn-submit">ورود</button>
+            <input type="password" id="password" name="password" required autocomplete="new-password" maxlength="128" placeholder="حداقل ۴ کاراکتر">
+            <label for="confirm_password">تکرار رمز عبور</label>
+            <input type="password" id="confirm_password" name="confirm_password" required autocomplete="new-password" maxlength="128" placeholder="رمز عبور را دوباره وارد کنید">
+            <button type="submit" class="btn btn-submit">ثبت‌نام</button>
         </form>
-        <p class="footer-note">حساب ندارید؟ <a href="{{ url_for('register') }}">ثبت‌نام کنید</a></p>
+        <p class="footer-note">قبلاً ثبت‌نام کرده‌اید؟ <a href="{{ url_for('login') }}">ورود</a></p>
     </div>
 </div>
 {% endblock %}

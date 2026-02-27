@@ -240,39 +240,243 @@
 .chat-form .btn-attach:hover { transform: scale(1.05); }
 .chat-form .btn-voice {
     flex-shrink: 0;
-    padding: 0.75rem 1rem;
-    border-radius: 14px;
-    transition: background var(--transition), transform 0.15s var(--ease);
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    transition: background var(--transition), transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+    font-size: 1.25rem;
 }
-.chat-form .btn-voice:hover { transform: scale(1.05); }
-.chat-form .btn-voice.recording { background: rgba(239, 68, 68, 0.3); color: #fca5a5; }
-.msg-voice {
-    max-width: 260px;
-    height: 40px;
-    border-radius: 12px;
-    display: block;
-    margin: 0.25rem 0;
+.chat-form .btn-voice:hover { transform: scale(1.08); }
+.chat-form .btn-voice.recording {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    color: #fff;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.35);
+    animation: btnVoicePulse 1.5s ease-in-out infinite;
 }
-.voice-preview, .voice-recording {
+@keyframes btnVoicePulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.35); }
+    50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.15); }
+}
+
+/* ——— کارت درخواست اجازهٔ میکروفون ——— */
+.mic-permission-card {
+    margin: 0 1.25rem 1rem;
+    padding: 1.1rem 1.25rem;
+    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(6, 182, 212, 0.12) 0%, rgba(15, 23, 42, 0.85) 100%);
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    animation: fadeIn 0.4s var(--ease);
+}
+.mic-permission-card.insecure {
+    background: linear-gradient(145deg, rgba(251, 191, 36, 0.1) 0%, rgba(15, 23, 42, 0.85) 100%);
+    border-color: rgba(251, 191, 36, 0.3);
+}
+.mic-permission-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(6, 182, 212, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+.mic-permission-card.insecure .mic-permission-icon { background: rgba(251, 191, 36, 0.2); }
+.mic-permission-text { flex: 1; min-width: 0; }
+.mic-permission-text strong { display: block; margin-bottom: 0.2rem; font-size: 0.95rem; }
+.mic-permission-text span { font-size: 0.85rem; color: var(--text-soft); line-height: 1.45; }
+.mic-permission-card .btn { flex-shrink: 0; white-space: nowrap; }
+
+/* ——— نوار ضبط (سبک تلگرام) ——— */
+.voice-recording {
+    display: none;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1.25rem;
+    margin: 0 1.25rem 0.75rem;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    animation: fadeIn 0.25s var(--ease);
+}
+.voice-recording .voice-recording-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ef4444;
+    flex-shrink: 0;
+    animation: voicePulse 1s ease-in-out infinite;
+}
+@keyframes voicePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.1); } }
+.voice-recording .voice-recording-time {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 1rem;
+    min-width: 2.8em;
+}
+.voice-recording .voice-recording-label {
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-soft);
+}
+.voice-recording-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+.voice-recording-actions .btn-icon {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: transform 0.15s var(--ease), background 0.2s var(--ease);
+}
+.voice-recording-actions .btn-icon:hover { transform: scale(1.08); }
+.voice-recording-actions .btn-icon-cancel {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+.voice-recording-actions .btn-icon-send {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* ——— پیش‌نمایش ویس قبل از ارسال ——— */
+.voice-preview {
+    display: none;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    margin: 0 1.25rem 0.75rem;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(51, 65, 85, 0.5) 0%, rgba(30, 41, 59, 0.7) 100%);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    animation: fadeIn 0.3s var(--ease);
+}
+.voice-preview .voice-preview-player {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+.voice-preview .voice-preview-play-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    transition: transform 0.15s var(--ease), box-shadow 0.2s var(--ease);
+}
+.voice-preview .voice-preview-play-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px var(--accent-glow);
+}
+.voice-preview .voice-preview-play-btn.playing { background: var(--surface-hover); }
+.voice-preview-progress-wrap {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(71, 85, 105, 0.5);
+    overflow: hidden;
+}
+.voice-preview-progress {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.1s linear;
+}
+.voice-preview-duration {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.9rem;
+    font-weight: 600;
+    min-width: 2.5em;
+    color: var(--text-soft);
+}
+.voice-preview-actions {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: flex-end;
+}
+.voice-preview-actions .btn { min-height: 40px; }
+
+/* ——— حباب ویس در چت (سبک تلگرام) ——— */
+.voice-msg-bubble {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.6rem 1rem;
-    margin: 0 1.25rem 0.5rem;
-    border-radius: 14px;
-    background: rgba(51, 65, 85, 0.5);
-    border: 1px solid rgba(71, 85, 105, 0.4);
+    padding: 0.6rem 0.9rem 0.6rem 0.6rem;
+    min-width: 0;
+    max-width: 280px;
 }
-.voice-preview audio { max-width: 200px; height: 36px; }
-.voice-preview-actions { display: flex; gap: 0.5rem; }
-.voice-recording-dot {
-    width: 10px;
-    height: 10px;
+.voice-msg-bubble .voice-play-btn {
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
-    background: var(--danger);
-    animation: voicePulse 1s ease-in-out infinite;
+    background: rgba(255,255,255,0.25);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    font-size: 1rem;
+    flex-shrink: 0;
+    transition: background 0.2s var(--ease), transform 0.15s var(--ease);
 }
-@keyframes voicePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.voice-msg-bubble .voice-play-btn:hover { background: rgba(255,255,255,0.35); transform: scale(1.05); }
+.voice-msg-bubble .voice-waveform {
+    flex: 1;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+}
+.voice-msg-bubble .voice-waveform span {
+    width: 4px;
+    min-width: 4px;
+    border-radius: 2px;
+    background: currentColor;
+    opacity: 0.7;
+    height: 50%;
+    align-self: center;
+    transition: height 0.15s var(--ease);
+}
+.voice-msg-bubble .voice-waveform span.active { height: 100%; opacity: 1; }
+.voice-msg-bubble .voice-duration {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8rem;
+    opacity: 0.9;
+    flex-shrink: 0;
+}
+.msg.sent .voice-msg-bubble .voice-play-btn { background: rgba(255,255,255,0.3); }
+.msg.received .voice-msg-bubble .voice-play-btn { background: rgba(0,0,0,0.15); }
+.msg-voice {
+    display: none;
+}
+.chat-form.voice-mode .form-row,
+.chat-form.voice-mode button[type="submit"] {
+    display: none !important;
+}
 .chat-form .file-name {
     font-size: 0.8rem;
     color: var(--text-soft);
@@ -314,6 +518,7 @@
         <button type="button" class="btn btn-ghost back-btn" id="backBtn" aria-label="بازگشت">←</button>
         <span class="title" id="headerTitle">مسنجر — {{ username }}</span>
         <a href="{{ url_for('user_change_password') }}" class="btn btn-ghost header-link" title="تغییر رمز عبور">تغییر رمز</a>
+        <a href="{{ url_for('logout') }}" class="btn btn-ghost header-link" title="خروج از حساب">خروج</a>
     </header>
     <div class="open-chat-bar">
         <label for="otherUsername">نام کاربری:</label>
@@ -341,27 +546,47 @@
                 <button type="button" class="btn btn-ghost btn-sm" id="blockBtn" style="display: none;">مسدود کردن</button>
             </div>
             <div class="chat-messages" id="chatMessages"></div>
+            <!-- درخواست اجازهٔ میکروفون (یک‌بار نمایش) -->
+            <div class="mic-permission-card" id="micPermissionCard" style="display: none;">
+                <div class="mic-permission-icon" aria-hidden="true">🎤</div>
+                <div class="mic-permission-text">
+                    <strong>برای ارسال پیام صوتی</strong>
+                    <span id="micPermissionDesc">اجازهٔ دسترسی به میکروفون را بدهید تا بتوانید ویس ضبط و ارسال کنید.</span>
+                </div>
+                <button type="button" class="btn" id="btnGrantMic">اجازه دادن به میکروفون</button>
+            </div>
             <form class="chat-form" id="chatForm">
                 <div class="form-row">
                     <input type="text" id="msgInput" placeholder="پیام یا توضیح برای فایل..." autocomplete="off" maxlength="4096">
                     <button type="button" class="btn btn-secondary btn-attach" id="btnAttach" title="عکس یا فایل">📎</button>
-                    <button type="button" class="btn btn-secondary btn-voice" id="btnVoice" title="ضبط ویس">🎤</button>
+                    <button type="button" class="btn btn-secondary btn-voice" id="btnVoice" title="ضبط ویس" aria-label="ضبط ویس">🎤</button>
                 </div>
-                <div class="voice-preview" id="voicePreview" style="display: none;">
-                    <audio id="voicePreviewAudio" controls preload="metadata"></audio>
-                    <span class="voice-preview-actions">
+                <div class="voice-recording" id="voiceRecording">
+                    <span class="voice-recording-dot" aria-hidden="true"></span>
+                    <span class="voice-recording-time" id="voiceRecordingTime">0:00</span>
+                    <span class="voice-recording-label">در حال ضبط...</span>
+                    <div class="voice-recording-actions">
+                        <button type="button" class="btn-icon btn-icon-cancel" id="btnCancelRecording" title="لغو">🗑</button>
+                        <button type="button" class="btn-icon btn-icon-send" id="btnStopVoice" title="ارسال ویس">✓</button>
+                    </div>
+                </div>
+                <div class="voice-preview" id="voicePreview">
+                    <div class="voice-preview-player">
+                        <button type="button" class="voice-preview-play-btn" id="voicePreviewPlayBtn" title="پخش" aria-label="پخش">▶</button>
+                        <div class="voice-preview-progress-wrap">
+                            <div class="voice-preview-progress" id="voicePreviewProgress"></div>
+                        </div>
+                        <span class="voice-preview-duration" id="voicePreviewDuration">0:00</span>
+                    </div>
+                    <div class="voice-preview-actions">
+                        <button type="button" class="btn btn-ghost btn-sm" id="btnCancelVoice">حذف</button>
                         <button type="button" class="btn btn-sm" id="btnSendVoice">ارسال ویس</button>
-                        <button type="button" class="btn btn-ghost btn-sm" id="btnCancelVoice">لغو</button>
-                    </span>
-                </div>
-                <div class="voice-recording" id="voiceRecording" style="display: none;">
-                    <span class="voice-recording-dot"></span>
-                    <span>در حال ضبط...</span>
-                    <button type="button" class="btn btn-sm btn-danger" id="btnStopVoice">توقف</button>
+                    </div>
                 </div>
                 <input type="file" id="fileInput" accept="image/*,.pdf,.doc,.docx,.txt,.zip,.rar,.mp3,.mp4,.webm,.ogg,.wav,.m4a" style="display: none;">
                 <button type="submit" class="btn">ارسال</button>
             </form>
+            <audio id="voicePreviewAudio" preload="metadata" style="display: none;"></audio>
             <div class="file-name" id="filePreview"></div>
         </div>
     </div>
@@ -391,10 +616,18 @@ const filePreview = document.getElementById('filePreview');
 const btnVoice = document.getElementById('btnVoice');
 const voicePreview = document.getElementById('voicePreview');
 const voicePreviewAudio = document.getElementById('voicePreviewAudio');
+const voicePreviewPlayBtn = document.getElementById('voicePreviewPlayBtn');
+const voicePreviewProgress = document.getElementById('voicePreviewProgress');
+const voicePreviewDuration = document.getElementById('voicePreviewDuration');
 const btnSendVoice = document.getElementById('btnSendVoice');
 const btnCancelVoice = document.getElementById('btnCancelVoice');
 const voiceRecording = document.getElementById('voiceRecording');
+const voiceRecordingTime = document.getElementById('voiceRecordingTime');
 const btnStopVoice = document.getElementById('btnStopVoice');
+const btnCancelRecording = document.getElementById('btnCancelRecording');
+const micPermissionCard = document.getElementById('micPermissionCard');
+const micPermissionDesc = document.getElementById('micPermissionDesc');
+const btnGrantMic = document.getElementById('btnGrantMic');
 const toastEl = document.getElementById('toast');
 const historyList = document.getElementById('historyList');
 const historyEmpty = document.getElementById('historyEmpty');
@@ -412,7 +645,10 @@ let voiceBlob = null;
 let voiceChunks = [];
 let mediaRecorderInstance = null;
 let voiceStream = null;
+let voiceRecordingTimer = null;
+let voiceRecordingCancelled = false;
 var chatPollInterval = null;
+const MIC_PERMISSION_KEY = 'mic_permission_requested';
 
 function stopChatPoll() {
     if (chatPollInterval) {
@@ -456,23 +692,56 @@ fileInput.addEventListener('change', function() {
     filePreview.textContent = selectedFile ? selectedFile.name : '';
 });
 
+function formatVoiceTime(sec) {
+    if (sec === undefined || isNaN(sec)) return '0:00';
+    var m = Math.floor(sec / 60);
+    var s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
 function hideVoicePreview() {
+    if (voiceRecordingTimer) {
+        clearInterval(voiceRecordingTimer);
+        voiceRecordingTimer = null;
+    }
     if (voicePreviewAudio && voicePreviewAudio.src && voicePreviewAudio.src.indexOf('blob:') === 0) {
         URL.revokeObjectURL(voicePreviewAudio.src);
     }
+    voicePreviewAudio.removeEventListener('timeupdate', _voicePreviewTimeUpdate);
+    voicePreviewAudio.removeEventListener('ended', _voicePreviewEnded);
     voiceBlob = null;
     if (voicePreview) voicePreview.style.display = 'none';
-    if (voicePreviewAudio) { voicePreviewAudio.src = ''; voicePreviewAudio.srcObject = null; }
+    if (voicePreviewAudio) { voicePreviewAudio.pause(); voicePreviewAudio.src = ''; voicePreviewAudio.srcObject = null; }
+    if (voicePreviewPlayBtn) { voicePreviewPlayBtn.textContent = '▶'; voicePreviewPlayBtn.classList.remove('playing'); }
     if (btnVoice) btnVoice.classList.remove('recording');
+    if (chatForm) chatForm.classList.remove('voice-mode');
+}
+function _voicePreviewTimeUpdate() {
+    var a = voicePreviewAudio;
+    if (voicePreviewProgress && a.duration) voicePreviewProgress.style.width = (100 * a.currentTime / a.duration) + '%';
+}
+function _voicePreviewEnded() {
+    if (voicePreviewPlayBtn) { voicePreviewPlayBtn.textContent = '▶'; voicePreviewPlayBtn.classList.remove('playing'); }
+    if (voicePreviewProgress) voicePreviewProgress.style.width = '0%';
 }
 function showVoicePreview(blob) {
     voiceBlob = blob;
     if (voiceRecording) voiceRecording.style.display = 'none';
     isVoiceRecording = false;
     if (btnVoice) btnVoice.classList.remove('recording');
+    if (voiceRecordingTimer) { clearInterval(voiceRecordingTimer); voiceRecordingTimer = null; }
     if (voicePreviewAudio && blob) {
         voicePreviewAudio.src = URL.createObjectURL(blob);
+        voicePreviewProgress.style.width = '0%';
+        voicePreviewDuration.textContent = '0:00';
+        voicePreviewPlayBtn.textContent = '▶';
+        voicePreviewPlayBtn.classList.remove('playing');
+        voicePreviewAudio.addEventListener('loadedmetadata', function onMeta() {
+            voicePreviewDuration.textContent = formatVoiceTime(voicePreviewAudio.duration);
+        }, { once: true });
+        voicePreviewAudio.addEventListener('timeupdate', _voicePreviewTimeUpdate);
+        voicePreviewAudio.addEventListener('ended', _voicePreviewEnded);
         voicePreview.style.display = 'flex';
+        if (chatForm) chatForm.classList.add('voice-mode');
     }
 }
 function startVoiceRecording() {
@@ -503,6 +772,10 @@ function startVoiceRecording() {
         mediaRecorderInstance.onstop = function() {
             voiceStream.getTracks().forEach(function(t) { t.stop(); });
             voiceStream = null;
+            if (voiceRecordingCancelled) {
+                voiceRecordingCancelled = false;
+                return;
+            }
             if (voiceChunks.length) {
                 var blob = new Blob(voiceChunks, { type: mime });
                 showVoicePreview(blob);
@@ -512,8 +785,17 @@ function startVoiceRecording() {
         };
         mediaRecorderInstance.start(200);
         isVoiceRecording = true;
-        if (voiceRecording) voiceRecording.style.display = 'flex';
+        if (voiceRecording) {
+            voiceRecording.style.display = 'flex';
+            voiceRecordingTime.textContent = '0:00';
+        }
+        if (chatForm) chatForm.classList.add('voice-mode');
         if (btnVoice) btnVoice.classList.add('recording');
+        var startMs = Date.now();
+        voiceRecordingTimer = setInterval(function() {
+            var sec = Math.floor((Date.now() - startMs) / 1000);
+            if (voiceRecordingTime) voiceRecordingTime.textContent = formatVoiceTime(sec);
+        }, 1000);
     }).catch(function(err) {
         if (err && err.name === 'NotAllowedError') {
             showToast('دسترسی میکروفون رد شد. در تنظیمات سایت/مرورگر اجازهٔ میکروفون را بدهید.');
@@ -524,8 +806,22 @@ function startVoiceRecording() {
 }
 function stopVoiceRecording() {
     if (!isVoiceRecording || !mediaRecorderInstance || mediaRecorderInstance.state === 'inactive') return;
+    if (voiceRecordingTimer) { clearInterval(voiceRecordingTimer); voiceRecordingTimer = null; }
     mediaRecorderInstance.stop();
     mediaRecorderInstance = null;
+}
+function cancelVoiceRecording() {
+    if (!isVoiceRecording || !mediaRecorderInstance) return;
+    voiceRecordingCancelled = true;
+    if (voiceRecordingTimer) { clearInterval(voiceRecordingTimer); voiceRecordingTimer = null; }
+    mediaRecorderInstance.stop();
+    mediaRecorderInstance = null;
+    voiceChunks = [];
+    isVoiceRecording = false;
+    if (voiceRecording) voiceRecording.style.display = 'none';
+    if (btnVoice) btnVoice.classList.remove('recording');
+    if (chatForm) chatForm.classList.remove('voice-mode');
+    showToast('ضبط لغو شد');
 }
 
 if (btnVoice) {
@@ -537,6 +833,22 @@ if (btnVoice) {
 }
 if (btnStopVoice) {
     btnStopVoice.addEventListener('click', stopVoiceRecording);
+}
+if (btnCancelRecording) {
+    btnCancelRecording.addEventListener('click', cancelVoiceRecording);
+}
+if (voicePreviewPlayBtn && voicePreviewAudio) {
+    voicePreviewPlayBtn.addEventListener('click', function() {
+        if (voicePreviewAudio.paused) {
+            voicePreviewAudio.play();
+            voicePreviewPlayBtn.textContent = '❚❚';
+            voicePreviewPlayBtn.classList.add('playing');
+        } else {
+            voicePreviewAudio.pause();
+            voicePreviewPlayBtn.textContent = '▶';
+            voicePreviewPlayBtn.classList.remove('playing');
+        }
+    });
 }
 if (btnSendVoice) {
     btnSendVoice.addEventListener('click', async function() {
@@ -564,6 +876,57 @@ if (btnSendVoice) {
 }
 if (btnCancelVoice) {
     btnCancelVoice.addEventListener('click', hideVoicePreview);
+}
+
+function updateMicPermissionCard() {
+    if (!micPermissionCard || !chatActive) return;
+    var hasRequested = localStorage.getItem(MIC_PERMISSION_KEY) === '1';
+    var chatOpen = chatActive.classList.contains('visible') && currentOtherId;
+    if (!chatOpen || hasRequested) {
+        micPermissionCard.style.display = 'none';
+        return;
+    }
+    if (!window.isSecureContext) {
+        micPermissionCard.className = 'mic-permission-card insecure';
+        if (micPermissionDesc) micPermissionDesc.textContent = 'برای ضبط ویس، سایت باید با https باز شود یا وب‌اپ را نصب کنید.';
+        if (btnGrantMic) { btnGrantMic.textContent = 'متوجه شدم'; btnGrantMic.dataset.action = 'dismiss'; }
+    } else {
+        micPermissionCard.className = 'mic-permission-card';
+        if (micPermissionDesc) micPermissionDesc.textContent = 'اجازهٔ دسترسی به میکروفون را بدهید تا بتوانید ویس ضبط و ارسال کنید.';
+        if (btnGrantMic) { btnGrantMic.textContent = 'اجازه دادن به میکروفون'; btnGrantMic.dataset.action = 'grant'; }
+    }
+    micPermissionCard.style.display = 'flex';
+}
+if (btnGrantMic) {
+    btnGrantMic.addEventListener('click', function() {
+        if (btnGrantMic.dataset.action === 'dismiss') {
+            localStorage.setItem(MIC_PERMISSION_KEY, '1');
+            micPermissionCard.style.display = 'none';
+            return;
+        }
+        if (!window.isSecureContext) {
+            showToast('ضبط ویس فقط با https یا نصب وب‌اپ ممکن است.');
+            return;
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast('ضبط صدا در این مرورگر پشتیبانی نمیشه');
+            return;
+        }
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            stream.getTracks().forEach(function(t) { t.stop(); });
+            localStorage.setItem(MIC_PERMISSION_KEY, '1');
+            micPermissionCard.style.display = 'none';
+            showToast('میکروفون فعال شد. حالا می‌تونید ویس بفرستید.');
+        }).catch(function(err) {
+            if (err && err.name === 'NotAllowedError') {
+                showToast('دسترسی رد شد. در تنظیمات مرورگر اجازهٔ میکروفون را بدهید.');
+            } else {
+                showToast('دسترسی به میکروفون داده نشد.');
+            }
+            localStorage.setItem(MIC_PERMISSION_KEY, '1');
+            micPermissionCard.style.display = 'none';
+        });
+    });
 }
 
 function loadConversations(q) {
@@ -602,6 +965,7 @@ function loadConversations(q) {
                     backBtn.classList.add('visible');
                     headerTitle.textContent = name;
                     loadChat();
+                    updateMicPermissionCard();
                 });
             });
         })
@@ -658,10 +1022,48 @@ btnOpenChat.addEventListener('click', async function() {
         headerTitle.textContent = currentOtherName;
         loadChat();
         loadConversations();
+        updateMicPermissionCard();
     } finally {
         setLoading(false);
     }
 });
+
+function initVoiceBubbles() {
+    if (!chatMessages) return;
+    chatMessages.querySelectorAll('.voice-msg-bubble').forEach(function(bubble) {
+        var btn = bubble.querySelector('.voice-play-btn');
+        var durEl = bubble.querySelector('.voice-duration');
+        var audio = bubble.querySelector('audio');
+        var waveform = bubble.querySelector('.voice-waveform');
+        if (!btn || !audio) return;
+        audio.addEventListener('loadedmetadata', function() {
+            if (durEl) durEl.textContent = formatVoiceTime(audio.duration);
+        });
+        audio.addEventListener('ended', function() {
+            if (btn) { btn.textContent = '▶'; btn.classList.remove('playing'); }
+            if (waveform) waveform.querySelectorAll('span').forEach(function(s) { s.classList.remove('active'); });
+        });
+        audio.addEventListener('timeupdate', function() {
+            if (!waveform || !audio.duration) return;
+            var pct = audio.currentTime / audio.duration;
+            var idx = Math.floor(pct * 20);
+            waveform.querySelectorAll('span').forEach(function(s, i) {
+                if (i <= idx) s.classList.add('active'); else s.classList.remove('active');
+            });
+        });
+        btn.addEventListener('click', function() {
+            if (audio.paused) {
+                audio.play();
+                btn.textContent = '❚❚';
+                btn.classList.add('playing');
+            } else {
+                audio.pause();
+                btn.textContent = '▶';
+                btn.classList.remove('playing');
+            }
+        });
+    });
+}
 
 function buildMessageHtml(m, otherReadUpTo) {
     var sent = m.sender_id === userId;
@@ -674,7 +1076,20 @@ function buildMessageHtml(m, otherReadUpTo) {
         parts.push('<img class="msg-img" src="/api/file/' + m.id + '" alt="عکس" loading="lazy">');
     }
     if (m.message_type === 'voice' && m.id) {
-        parts.push('<audio class="msg-voice" controls preload="metadata" src="/api/file/' + m.id + '"></audio>');
+        var waveId = 'w' + m.id;
+        var bars = [];
+        for (var i = 0; i < 20; i++) {
+            var h = (30 + (m.id + i) % 70) + '%';
+            bars.push('<span style="height:' + h + '" data-idx="' + i + '"></span>');
+        }
+        parts.push(
+            '<div class="voice-msg-bubble" data-msg-id="' + m.id + '">' +
+            '<button type="button" class="voice-play-btn" aria-label="پخش">▶</button>' +
+            '<div class="voice-waveform" id="' + waveId + '">' + bars.join('') + '</div>' +
+            '<span class="voice-duration">0:00</span>' +
+            '<audio preload="metadata" src="/api/file/' + m.id + '" data-msg-id="' + m.id + '"></audio>' +
+            '</div>'
+        );
     }
     if (m.message_type === 'file' && m.id && m.file_name) {
         parts.push('<a class="msg-file" href="/api/file/' + m.id + '" download="' + escapeHtml(m.file_name) + '">' + escapeHtml(m.file_name) + '</a>');
@@ -709,6 +1124,7 @@ function loadChat(isPolling) {
             }
             var otherReadUpTo = data.other_read_up_to != null ? data.other_read_up_to : null;
             chatMessages.innerHTML = data.messages.map(function(m) { return buildMessageHtml(m, otherReadUpTo); }).join('');
+            initVoiceBubbles();
             chatMessages.querySelectorAll('.msg-del').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var mid = parseInt(btn.getAttribute('data-msg-id'), 10);

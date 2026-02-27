@@ -11,6 +11,7 @@ _rate_lock = Lock()
 
 # تنظیمات
 RATE_LOGIN_PER_MIN = 5
+RATE_REGISTER_PER_MIN = 3
 RATE_API_SEND_PER_MIN = 30
 RATE_WINDOW_SEC = 60
 

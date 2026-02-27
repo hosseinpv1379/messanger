@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}ورود — مسنجر{% endblock %}
+{% block title %}ورود مدیر — مسنجر{% endblock %}
 {% block extra_css %}
 .login-wrap {
     min-height: calc(100vh - 2rem);
@@ -30,13 +30,13 @@
     width: 56px;
     height: 56px;
     margin: 0 auto 1.25rem;
-    background: linear-gradient(135deg, var(--accent), #22d3ee);
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
     border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1.75rem;
-    box-shadow: 0 8px 24px var(--accent-glow);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
 }
 .login-card h1 {
     margin: 0 0 0.5rem 0;
@@ -61,20 +61,6 @@
     font-size: 1.05rem;
     border-radius: var(--radius-sm);
 }
-.login-card .footer-note {
-    text-align: center;
-    margin-top: 1.5rem;
-    color: var(--text-soft);
-    font-size: 0.85rem;
-    opacity: 0.9;
-}
-.login-card .footer-note a { font-weight: 600; }
-.login-card .success {
-    color: var(--success);
-    font-size: 0.95rem;
-    margin-bottom: 0.5rem;
-    text-align: center;
-}
 {% if error %}
 .login-card .error { animation: shake 0.4s ease; }
 @keyframes shake {
@@ -86,24 +72,20 @@
 {% block body %}
 <div class="login-wrap">
     <div class="login-card">
-        <div class="logo">💬</div>
-        <h1>ورود به مسنجر</h1>
-        <p class="sub">پیام‌ها رمزنگاری‌شده ذخیره می‌شوند</p>
-        {% if registered %}
-        <p class="success" role="status">ثبت‌نام با موفقیت انجام شد. وارد شوید.</p>
-        {% endif %}
+        <div class="logo">🔐</div>
+        <h1>ورود به پنل مدیریت</h1>
+        <p class="sub">ورود با حساب مدیر</p>
         {% if error %}
         <p class="error" role="alert">{{ error }}</p>
         {% endif %}
-        <form method="post" action="{{ url_for('login') }}">
+        <form method="post" action="{{ url_for('admin_login') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <label for="username">نام کاربری</label>
-            <input type="text" id="username" name="username" required autofocus autocomplete="username" maxlength="64" placeholder="نام کاربری را وارد کنید">
+            <label for="username">نام کاربری مدیر</label>
+            <input type="text" id="username" name="username" required autofocus autocomplete="username" maxlength="64" placeholder="نام کاربری">
             <label for="password">رمز عبور</label>
             <input type="password" id="password" name="password" required autocomplete="current-password" maxlength="128" placeholder="رمز عبور">
             <button type="submit" class="btn btn-submit">ورود</button>
         </form>
-        <p class="footer-note">حساب ندارید؟ <a href="{{ url_for('register') }}">ثبت‌نام کنید</a></p>
     </div>
 </div>
 {% endblock %}
