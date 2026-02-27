@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import base64
+import logging
 import uuid
 from pathlib import Path
 from flask import Flask, request, redirect, url_for, session, render_template, jsonify, send_file
@@ -10,6 +11,16 @@ import security
 from crypto_util import encrypt_bytes, decrypt_bytes
 
 app = Flask(__name__)
+log = logging.getLogger(__name__)
+
+
+@app.errorhandler(500)
+def _api_error_500(e):
+    """برای درخواست‌های API همیشه JSON برگردان تا کلاینت «پاسخ نامعتبر» نبیند."""
+    if request.path.startswith("/api/"):
+        log.exception("API 500: %s %s", request.method, request.path)
+        return jsonify({"ok": False, "error": "خطای سرور. دوباره تلاش کنید."}), 500
+    raise e
 app.secret_key = config.SECRET_KEY
 app.config["SESSION_COOKIE_HTTPONLY"] = config.SESSION_COOKIE_HTTPONLY
 app.config["SESSION_COOKIE_SAMESITE"] = config.SESSION_COOKIE_SAMESITE
@@ -639,62 +650,66 @@ def api_send():
     # ارسال مدیا (عکس/فایل) با multipart — پشتیبانی از E2EE: کلاینت فایل رمزشده می‌فرستد، سرور ذخیره می‌کند بدون دسترسی به محتوا
     if request.files:
         import base64
-        f = request.files.get("file")
-        receiver_id = request.form.get("receiver_id", type=int)
-        e2ee_media = request.form.get("e2ee_media") == "1"
-        caption_e2ee_b64 = request.form.get("caption_e2ee") or ""
-        caption = (request.form.get("body") or request.form.get("caption") or "").strip()[: config.MAX_MESSAGE_LEN]
-        if not f or not receiver_id:
-            return jsonify({"ok": False, "error": "فایل یا گیرنده مشخص نیست"}), 400
-        if receiver_id == uid:
-            return jsonify({"ok": False, "error": "نمی‌توانید به خودتان پیام بفرستید"}), 400
-        if db.get_user_by_id(receiver_id) is None:
-            return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
-        if db.is_blocked(receiver_id, uid):
-            return jsonify({"ok": False, "error": "شما توسط این کاربر مسدود شده‌اید"}), 403
-        fn = (f.filename or "").strip() or "file"
-        ext = Path(fn).suffix.lower()
-        content = f.read()
-        size = len(content)
-        is_voice = request.form.get("message_type") == "voice" or (
-            (getattr(f, "content_type") or "").startswith("audio/")
-        )
-        if is_voice:
-            if size > config.MAX_VOICE_SIZE:
-                return jsonify({"ok": False, "error": "حجم ویس حداکثر ۵ مگابایت"}), 400
-            message_type = "voice"
-        elif ext in config.ALLOWED_IMAGE_EXTENSIONS:
-            if size > config.MAX_IMAGE_SIZE:
-                return jsonify({"ok": False, "error": "حجم عکس حداکثر ۱۰ مگابایت"}), 400
-            message_type = "image"
-        else:
-            if size > config.MAX_FILE_SIZE:
-                return jsonify({"ok": False, "error": "حجم فایل حداکثر ۲۵ مگابایت"}), 400
-            message_type = "file"
-        config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        safe_name = f"{uuid.uuid4().hex}{ext}"
-        file_path = config.UPLOAD_DIR / safe_name
-        if e2ee_media:
-            file_path.write_bytes(content)
-            caption_e2ee_blob = None
-            if caption_e2ee_b64:
-                try:
-                    caption_e2ee_blob = base64.b64decode((caption_e2ee_b64 or "").encode() if isinstance(caption_e2ee_b64, str) else caption_e2ee_b64)
-                except Exception:
-                    caption_e2ee_blob = None
-            if not db.message_send_media(uid, receiver_id, "", message_type, str(safe_name), fn, request.form.get("mime_type") or "application/octet-stream", caption_e2ee_blob=caption_e2ee_blob, is_e2ee=True):
-                file_path.unlink(missing_ok=True)
-                return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
-        else:
-            enc_content = encrypt_bytes(content)
-            if not enc_content:
-                return jsonify({"ok": False, "error": "خطا در رمزنگاری فایل"}), 500
-            file_path.write_bytes(enc_content)
-            mime = (getattr(f, "content_type") or "") or ("image/jpeg" if message_type == "image" else "application/octet-stream")
-            if not db.message_send_media(uid, receiver_id, caption, message_type, str(safe_name), fn, mime):
-                file_path.unlink(missing_ok=True)
-                return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
-        return jsonify({"ok": True})
+        try:
+            f = request.files.get("file")
+            receiver_id = request.form.get("receiver_id", type=int)
+            e2ee_media = request.form.get("e2ee_media") == "1"
+            caption_e2ee_b64 = request.form.get("caption_e2ee") or ""
+            caption = (request.form.get("body") or request.form.get("caption") or "").strip()[: config.MAX_MESSAGE_LEN]
+            if not f or not receiver_id:
+                return jsonify({"ok": False, "error": "فایل یا گیرنده مشخص نیست"}), 400
+            if receiver_id == uid:
+                return jsonify({"ok": False, "error": "نمی‌توانید به خودتان پیام بفرستید"}), 400
+            if db.get_user_by_id(receiver_id) is None:
+                return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
+            if db.is_blocked(receiver_id, uid):
+                return jsonify({"ok": False, "error": "شما توسط این کاربر مسدود شده‌اید"}), 403
+            fn = (f.filename or "").strip() or "file"
+            ext = Path(fn).suffix.lower()
+            content = f.read()
+            size = len(content)
+            is_voice = request.form.get("message_type") == "voice" or (
+                (getattr(f, "content_type") or "").startswith("audio/")
+            )
+            if is_voice:
+                if size > config.MAX_VOICE_SIZE:
+                    return jsonify({"ok": False, "error": "حجم ویس حداکثر ۵ مگابایت"}), 400
+                message_type = "voice"
+            elif ext in config.ALLOWED_IMAGE_EXTENSIONS:
+                if size > config.MAX_IMAGE_SIZE:
+                    return jsonify({"ok": False, "error": "حجم عکس حداکثر ۱۰ مگابایت"}), 400
+                message_type = "image"
+            else:
+                if size > config.MAX_FILE_SIZE:
+                    return jsonify({"ok": False, "error": "حجم فایل حداکثر ۲۵ مگابایت"}), 400
+                message_type = "file"
+            config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            safe_name = f"{uuid.uuid4().hex}{ext}"
+            file_path = config.UPLOAD_DIR / safe_name
+            if e2ee_media:
+                file_path.write_bytes(content)
+                caption_e2ee_blob = None
+                if caption_e2ee_b64:
+                    try:
+                        caption_e2ee_blob = base64.b64decode((caption_e2ee_b64 or "").encode() if isinstance(caption_e2ee_b64, str) else caption_e2ee_b64)
+                    except Exception:
+                        caption_e2ee_blob = None
+                if not db.message_send_media(uid, receiver_id, "", message_type, str(safe_name), fn, request.form.get("mime_type") or "application/octet-stream", caption_e2ee_blob=caption_e2ee_blob, is_e2ee=True):
+                    file_path.unlink(missing_ok=True)
+                    return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
+            else:
+                enc_content = encrypt_bytes(content)
+                if not enc_content:
+                    return jsonify({"ok": False, "error": "خطا در رمزنگاری فایل"}), 500
+                file_path.write_bytes(enc_content)
+                mime = (getattr(f, "content_type") or "") or ("image/jpeg" if message_type == "image" else "application/octet-stream")
+                if not db.message_send_media(uid, receiver_id, caption, message_type, str(safe_name), fn, mime):
+                    file_path.unlink(missing_ok=True)
+                    return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
+            return jsonify({"ok": True})
+        except Exception as exc:
+            log.exception("api_send file upload: %s", exc)
+            return jsonify({"ok": False, "error": "خطای سرور در آپلود. دوباره تلاش کنید."}), 500
 
     # ارسال متن ساده (JSON) — پشتیبانی از E2EE
     data = request.get_json() or {}
@@ -900,42 +915,46 @@ def api_group_send(group_id):
         return jsonify({"ok": False, "error": "عضو گروه نیستید"}), 403
 
     if request.files:
-        f = request.files.get("file")
-        caption = (request.form.get("body") or request.form.get("caption") or "").strip()[: config.MAX_MESSAGE_LEN]
-        if not f:
-            return jsonify({"ok": False, "error": "فایل مشخص نیست"}), 400
-        fn = (f.filename or "").strip() or "file"
-        ext = Path(fn).suffix.lower()
-        content = f.read()
-        size = len(content)
-        is_voice = request.form.get("message_type") == "voice" or (
-            (getattr(f, "content_type") or "").startswith("audio/")
-        )
-        if is_voice:
-            if size > config.MAX_VOICE_SIZE:
-                return jsonify({"ok": False, "error": "حجم ویس حداکثر ۵ مگابایت"}), 400
-            message_type = "voice"
-        elif ext in config.ALLOWED_IMAGE_EXTENSIONS:
-            if size > config.MAX_IMAGE_SIZE:
-                return jsonify({"ok": False, "error": "حجم عکس حداکثر ۱۰ مگابایت"}), 400
-            message_type = "image"
-        else:
-            if size > config.MAX_FILE_SIZE:
-                return jsonify({"ok": False, "error": "حجم فایل حداکثر ۲۵ مگابایت"}), 400
-            message_type = "file"
-        config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        safe_name = f"{uuid.uuid4().hex}{ext}"
-        file_path = config.UPLOAD_DIR / safe_name
-        enc_content = encrypt_bytes(content)
-        if not enc_content:
-            return jsonify({"ok": False, "error": "خطا در رمزنگاری فایل"}), 500
-        file_path.write_bytes(enc_content)
-        rel_path = safe_name
-        mime = (getattr(f, "content_type") or "") or ("image/jpeg" if message_type == "image" else "application/octet-stream")
-        if not db.group_message_send_media(group_id, uid, caption, message_type, str(rel_path), fn, mime):
-            file_path.unlink(missing_ok=True)
-            return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
-        return jsonify({"ok": True})
+        try:
+            f = request.files.get("file")
+            caption = (request.form.get("body") or request.form.get("caption") or "").strip()[: config.MAX_MESSAGE_LEN]
+            if not f:
+                return jsonify({"ok": False, "error": "فایل مشخص نیست"}), 400
+            fn = (f.filename or "").strip() or "file"
+            ext = Path(fn).suffix.lower()
+            content = f.read()
+            size = len(content)
+            is_voice = request.form.get("message_type") == "voice" or (
+                (getattr(f, "content_type") or "").startswith("audio/")
+            )
+            if is_voice:
+                if size > config.MAX_VOICE_SIZE:
+                    return jsonify({"ok": False, "error": "حجم ویس حداکثر ۵ مگابایت"}), 400
+                message_type = "voice"
+            elif ext in config.ALLOWED_IMAGE_EXTENSIONS:
+                if size > config.MAX_IMAGE_SIZE:
+                    return jsonify({"ok": False, "error": "حجم عکس حداکثر ۱۰ مگابایت"}), 400
+                message_type = "image"
+            else:
+                if size > config.MAX_FILE_SIZE:
+                    return jsonify({"ok": False, "error": "حجم فایل حداکثر ۲۵ مگابایت"}), 400
+                message_type = "file"
+            config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            safe_name = f"{uuid.uuid4().hex}{ext}"
+            file_path = config.UPLOAD_DIR / safe_name
+            enc_content = encrypt_bytes(content)
+            if not enc_content:
+                return jsonify({"ok": False, "error": "خطا در رمزنگاری فایل"}), 500
+            file_path.write_bytes(enc_content)
+            rel_path = safe_name
+            mime = (getattr(f, "content_type") or "") or ("image/jpeg" if message_type == "image" else "application/octet-stream")
+            if not db.group_message_send_media(group_id, uid, caption, message_type, str(rel_path), fn, mime):
+                file_path.unlink(missing_ok=True)
+                return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
+            return jsonify({"ok": True})
+        except Exception as exc:
+            log.exception("api_group_send file upload: %s", exc)
+            return jsonify({"ok": False, "error": "خطای سرور در آپلود. دوباره تلاش کنید."}), 500
 
     data = request.get_json() or {}
     body = (data.get("body") or "").strip()
