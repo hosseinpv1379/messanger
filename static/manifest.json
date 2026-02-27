@@ -1,0 +1,12 @@
+{
+  "name": "مسنجر",
+  "short_name": "مسنجر",
+  "description": "مسنجر تحت وب",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "lang": "fa",
+  "dir": "rtl"
+}

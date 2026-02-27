@@ -476,6 +476,10 @@ function showVoicePreview(blob) {
     }
 }
 function startVoiceRecording() {
+    if (!window.isSecureContext) {
+        showToast('ضبط ویس فقط با https یا نصب وب‌اپ ممکن است. سایت را با https باز کنید یا از منوی مرورگر «افزودن به صفحهٔ اصلی» را بزنید.');
+        return;
+    }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showToast('ضبط صدا در این مرورگر پشتیبانی نمیشه');
         return;
@@ -510,8 +514,12 @@ function startVoiceRecording() {
         isVoiceRecording = true;
         if (voiceRecording) voiceRecording.style.display = 'flex';
         if (btnVoice) btnVoice.classList.add('recording');
-    }).catch(function() {
-        showToast('دسترسی به میکروفون داده نشد');
+    }).catch(function(err) {
+        if (err && err.name === 'NotAllowedError') {
+            showToast('دسترسی میکروفون رد شد. در تنظیمات سایت/مرورگر اجازهٔ میکروفون را بدهید.');
+        } else {
+            showToast('دسترسی به میکروفون داده نشد. با https یا نصب وب‌اپ امتحان کنید.');
+        }
     });
 }
 function stopVoiceRecording() {
