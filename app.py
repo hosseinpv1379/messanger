@@ -129,6 +129,9 @@ def login():
         session["user_id"] = uid
         session["username"] = username
         session["csrf_token"] = security.csrf_token(session)
+        next_url = request.args.get("next", "").strip()
+        if next_url and next_url.startswith("/"):
+            return redirect(next_url)
         return redirect(url_for("messenger"))
     return render_template(
         "login.html",
@@ -312,6 +315,8 @@ def messenger():
         username=session.get("username"),
         user_id=session.get("user_id"),
         csrf_token=security.csrf_token(session),
+        initial_group_id=request.args.get("group_id", type=int),
+        join_error=request.args.get("join_error"),
     )
 
 
@@ -584,6 +589,190 @@ def api_file(message_id):
     mime = msg["mime_type"] or "application/octet-stream"
     name = msg["file_name"] or "file"
     return send_file(BytesIO(data), mimetype=mime, as_attachment=(msg["message_type"] == "file"), download_name=name)
+
+
+# ——— گروه‌ها ———
+@app.route("/api/groups", methods=["GET"])
+@user_required
+def api_groups_list():
+    uid = session["user_id"]
+    groups = db.group_list_for_user(uid)
+    return jsonify(groups)
+
+
+@app.route("/api/groups", methods=["POST"])
+@user_required
+def api_groups_create():
+    if not security.csrf_valid(session, _get_csrf_from_request()):
+        return jsonify({"ok": False, "error": "درخواست نامعتبر"}), 403
+    uid = session["user_id"]
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    group, err = db.group_create(uid, name)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    base = request.url_root.rstrip("/")
+    invite_link = f"{base}/join/{group['invite_code']}"
+    return jsonify({"ok": True, "group": group, "invite_link": invite_link})
+
+
+@app.route("/api/groups/<int:group_id>")
+@user_required
+def api_group_get(group_id):
+    uid = session["user_id"]
+    group = db.group_get(group_id, uid)
+    if not group:
+        return jsonify({"error": "گروه یافت نشد یا شما عضو نیستید"}), 404
+    return jsonify(group)
+
+
+@app.route("/api/groups/join", methods=["POST"])
+@user_required
+def api_groups_join():
+    if not security.csrf_valid(session, _get_csrf_from_request()):
+        return jsonify({"ok": False, "error": "درخواست نامعتبر"}), 403
+    uid = session["user_id"]
+    data = request.get_json() or {}
+    code = (data.get("invite_code") or data.get("code") or "").strip()
+    group, err = db.group_join_by_code(code, uid)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, "group": group})
+
+
+@app.route("/api/groups/<int:group_id>/messages")
+@user_required
+def api_group_messages(group_id):
+    uid = session["user_id"]
+    if not db.group_is_member(group_id, uid):
+        return jsonify({"error": "گروه یافت نشد یا عضو نیستید"}), 404
+    messages = db.group_messages_list(group_id, uid)
+    senders = {}
+    for m in messages:
+        sid = m["sender_id"]
+        if sid not in senders:
+            u = db.get_user_by_id(sid)
+            senders[sid] = u["username"] if u else ""
+    return jsonify({"messages": messages, "senders": senders})
+
+
+@app.route("/api/groups/<int:group_id>/send", methods=["POST"])
+@user_required
+def api_group_send(group_id):
+    ip = security.get_client_ip()
+    if not security.rate_limit(f"send:{ip}", security.RATE_API_SEND_PER_MIN):
+        return jsonify({"ok": False, "error": "ارسال پیام زیاد است. کمی صبر کنید."}), 429
+    if not security.csrf_valid(session, _get_csrf_from_request()):
+        return jsonify({"ok": False, "error": "درخواست نامعتبر."}), 403
+    uid = session["user_id"]
+    if not db.group_is_member(group_id, uid):
+        return jsonify({"ok": False, "error": "عضو گروه نیستید"}), 403
+
+    if request.files:
+        f = request.files.get("file")
+        caption = (request.form.get("body") or request.form.get("caption") or "").strip()[: config.MAX_MESSAGE_LEN]
+        if not f:
+            return jsonify({"ok": False, "error": "فایل مشخص نیست"}), 400
+        fn = (f.filename or "").strip() or "file"
+        ext = Path(fn).suffix.lower()
+        content = f.read()
+        size = len(content)
+        is_voice = request.form.get("message_type") == "voice" or (
+            (getattr(f, "content_type") or "").startswith("audio/")
+        )
+        if is_voice:
+            if size > config.MAX_VOICE_SIZE:
+                return jsonify({"ok": False, "error": "حجم ویس حداکثر ۵ مگابایت"}), 400
+            message_type = "voice"
+        elif ext in config.ALLOWED_IMAGE_EXTENSIONS:
+            if size > config.MAX_IMAGE_SIZE:
+                return jsonify({"ok": False, "error": "حجم عکس حداکثر ۱۰ مگابایت"}), 400
+            message_type = "image"
+        else:
+            if size > config.MAX_FILE_SIZE:
+                return jsonify({"ok": False, "error": "حجم فایل حداکثر ۲۵ مگابایت"}), 400
+            message_type = "file"
+        config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        safe_name = f"{uuid.uuid4().hex}{ext}"
+        file_path = config.UPLOAD_DIR / safe_name
+        enc_content = encrypt_bytes(content)
+        if not enc_content:
+            return jsonify({"ok": False, "error": "خطا در رمزنگاری فایل"}), 500
+        file_path.write_bytes(enc_content)
+        rel_path = safe_name
+        mime = (getattr(f, "content_type") or "") or ("image/jpeg" if message_type == "image" else "application/octet-stream")
+        if not db.group_message_send_media(group_id, uid, caption, message_type, str(rel_path), fn, mime):
+            file_path.unlink(missing_ok=True)
+            return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
+        return jsonify({"ok": True})
+
+    data = request.get_json() or {}
+    body = (data.get("body") or "").strip()
+    if not body:
+        return jsonify({"ok": False, "error": "متن پیام خالی است"}), 400
+    if len(body) > config.MAX_MESSAGE_LEN:
+        return jsonify({"ok": False, "error": f"پیام حداکثر {config.MAX_MESSAGE_LEN} کاراکتر مجاز است."}), 400
+    if not db.group_message_send(group_id, uid, body):
+        return jsonify({"ok": False, "error": "خطا در ارسال پیام"}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/api/groups/<int:group_id>/leave", methods=["POST"])
+@user_required
+def api_group_leave(group_id):
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
+        return jsonify({"ok": False, "error": "درخواست نامعتبر"}), 403
+    uid = session["user_id"]
+    ok, err = db.group_leave(group_id, uid)
+    if not ok:
+        return jsonify({"ok": False, "error": err or "خطا"}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/api/groups/<int:group_id>/message/<int:message_id>", methods=["DELETE"])
+@user_required
+def api_group_delete_message(group_id, message_id):
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
+        return jsonify({"ok": False, "error": "درخواست نامعتبر"}), 403
+    uid = session["user_id"]
+    if not db.group_is_member(group_id, uid):
+        return jsonify({"ok": False, "error": "عضو گروه نیستید"}), 403
+    if db.group_message_delete(message_id, uid):
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "امکان حذف این پیام نیست"}), 400
+
+
+@app.route("/api/group-file/<int:message_id>")
+@user_required
+def api_group_file(message_id):
+    uid = session["user_id"]
+    msg = db.get_group_message_by_id(message_id)
+    if not msg:
+        return jsonify({"error": "پیام یافت نشد"}), 404
+    if not db.group_is_member(msg["group_id"], uid):
+        return jsonify({"error": "دسترسی مجاز نیست"}), 403
+    full_path = config.UPLOAD_DIR / msg["file_path"]
+    if not full_path.exists():
+        return jsonify({"error": "فایل یافت نشد"}), 404
+    enc = full_path.read_bytes()
+    data = decrypt_bytes(enc)
+    if not data:
+        return jsonify({"error": "خطا در خواندن فایل"}), 500
+    mime = msg["mime_type"] or "application/octet-stream"
+    name = msg["file_name"] or "file"
+    return send_file(BytesIO(data), mimetype=mime, as_attachment=(msg["message_type"] == "file"), download_name=name)
+
+
+@app.route("/join/<invite_code>")
+def join_group_link(invite_code):
+    """لینک دعوت گروه: اگر لاگین باشد عضو می‌شود و به مسنجر می‌رود، وگرنه به لاگین."""
+    if session.get("user_id") is None:
+        return redirect(url_for("login", next=request.url))
+    uid = session["user_id"]
+    group, err = db.group_join_by_code(invite_code.strip(), uid)
+    if err:
+        return redirect(url_for("messenger", join_error=err))
+    return redirect(url_for("messenger", group_id=group["id"]))
 
 
 if __name__ == "__main__":

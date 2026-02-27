@@ -67,7 +67,7 @@ def _migrate_messages_media(c):
 
 
 def _migrate_extra(c):
-    """جدول‌ها و ستون‌های اضافی: بلوک، خوانده‌شده، بن کاربر."""
+    """جدول‌ها و ستون‌های اضافی: بلوک، خوانده‌شده، بن کاربر، گروه‌ها."""
     c.execute("""
         CREATE TABLE IF NOT EXISTS blocked (
             blocker_id INTEGER NOT NULL,
@@ -92,6 +92,43 @@ def _migrate_extra(c):
     cols = [row[1] for row in cur.fetchall()]
     if "is_banned" not in cols:
         c.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0")
+    # گروه‌ها
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            invite_code TEXT UNIQUE NOT NULL,
+            created_by_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (created_by_id) REFERENCES users(id)
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS group_members (
+            group_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS group_messages (
+            id INTEGER PRIMARY KEY,
+            group_id INTEGER NOT NULL,
+            sender_id INTEGER NOT NULL,
+            body_encrypted BLOB NOT NULL,
+            message_type TEXT DEFAULT 'text',
+            file_path TEXT,
+            file_name TEXT,
+            mime_type TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            deleted_at TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_id) REFERENCES users(id)
+        )
+    """)
 
 
 def hash_password(password: str) -> str:
@@ -562,6 +599,8 @@ def user_delete(user_id: int) -> bool:
         c.execute("DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?", (user_id, user_id))
         c.execute("DELETE FROM blocked WHERE blocker_id = ? OR blocked_id = ?", (user_id, user_id))
         c.execute("DELETE FROM read_receipts WHERE user_id = ? OR other_id = ?", (user_id, user_id))
+        c.execute("DELETE FROM group_members WHERE user_id = ?", (user_id,))
+        c.execute("DELETE FROM groups WHERE created_by_id = ?", (user_id,))
         c.execute("DELETE FROM users WHERE id = ?", (user_id,))
     return True
 
@@ -595,3 +634,267 @@ def admin_set_user_password(user_id: int, new_password: str) -> tuple[bool, str]
             (hash_password(new_password), user_id),
         )
     return True, ""
+
+
+# ——— گروه‌ها ———
+def group_create(creator_id: int, name: str) -> tuple[dict | None, str]:
+    """ساخت گروه. برگرداندن (group_dict, '') یا (None, error)."""
+    name = (name or "").strip()
+    if not name or len(name) < 2:
+        return None, "نام گروه حداقل ۲ کاراکتر باشد."
+    if len(name) > 128:
+        return None, "نام گروه حداکثر ۱۲۸ کاراکتر."
+    code = secrets.token_urlsafe(8)
+    with get_conn() as c:
+        try:
+            c.execute(
+                "INSERT INTO groups (name, invite_code, created_by_id) VALUES (?, ?, ?)",
+                (name, code, creator_id),
+            )
+            gid = c.lastrowid
+            c.execute(
+                "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
+                (gid, creator_id),
+            )
+        except sqlite3.IntegrityError:
+            return None, "خطا در ساخت گروه. دوباره تلاش کنید."
+    g = group_get(gid, creator_id)
+    if g:
+        g["invite_code"] = code
+    return (g, "") if g else (None, "خطا در ساخت گروه.")
+
+
+def group_get(group_id: int, user_id: int) -> dict | None:
+    """اطلاعات گروه فقط اگر user_id عضو باشد."""
+    with get_conn() as c:
+        r = c.execute(
+            """SELECT g.id, g.name, g.invite_code, g.created_by_id, g.created_at
+               FROM groups g
+               INNER JOIN group_members m ON m.group_id = g.id AND m.user_id = ?
+               WHERE g.id = ?""",
+            (user_id, group_id),
+        ).fetchone()
+        if not r:
+            return None
+        members = c.execute(
+            "SELECT user_id FROM group_members WHERE group_id = ? ORDER BY joined_at",
+            (group_id,),
+        ).fetchall()
+        member_ids = [row[0] for row in members]
+    return {
+        "id": r[0],
+        "name": r[1],
+        "invite_code": r[2],
+        "created_by_id": r[3],
+        "created_at": r[4],
+        "members": [get_user_by_id(uid) for uid in member_ids if get_user_by_id(uid)],
+    }
+
+
+def group_list_for_user(user_id: int) -> list[dict]:
+    """لیست گروه‌هایی که کاربر در آن‌ها عضو است (با آخرین پیام برای پیش‌نمایش)."""
+    with get_conn() as c:
+        rows = c.execute(
+            """SELECT g.id, g.name, g.invite_code,
+                      (SELECT body_encrypted FROM group_messages WHERE group_id = g.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1) AS last_body,
+                      (SELECT message_type FROM group_messages WHERE group_id = g.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1) AS last_type,
+                      (SELECT created_at FROM group_messages WHERE group_id = g.id ORDER BY created_at DESC LIMIT 1) AS last_at
+               FROM groups g
+               INNER JOIN group_members m ON m.group_id = g.id AND m.user_id = ?
+               ORDER BY CASE WHEN last_at IS NULL THEN 0 ELSE 1 END DESC, last_at DESC, g.id DESC""",
+            (user_id,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        body_enc = r[3]
+        msg_type = r[4] or "text"
+        last_at = r[5]
+        if body_enc:
+            preview = decrypt_message(body_enc)
+            if preview is None:
+                preview = "[پیام]"
+            elif msg_type == "image":
+                preview = "📷 عکس"
+            elif msg_type == "file":
+                preview = "📎 فایل"
+            elif msg_type == "voice":
+                preview = "🎤 ویس"
+            else:
+                preview = (preview.strip() or " ")[:50]
+                if len((preview or "").strip()) > 50:
+                    preview += "…"
+        else:
+            preview = "گروه بدون پیام"
+        out.append({
+            "id": r[0],
+            "name": r[1],
+            "invite_code": r[2],
+            "last_preview": preview,
+            "last_at": last_at,
+        })
+    return out
+
+
+def group_is_member(group_id: int, user_id: int) -> bool:
+    with get_conn() as c:
+        r = c.execute(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?",
+            (group_id, user_id),
+        ).fetchone()
+    return r is not None
+
+
+def group_join_by_code(invite_code: str, user_id: int) -> tuple[dict | None, str]:
+    """عضویت در گروه با لینک/کد. برگرداندن (group, '') یا (None, error)."""
+    code = (invite_code or "").strip()
+    if not code:
+        return None, "کد دعوت نامعتبر است."
+    with get_conn() as c:
+        g = c.execute(
+            "SELECT id, name FROM groups WHERE invite_code = ?", (code,)
+        ).fetchone()
+        if not g:
+            return None, "گروهی با این لینک یافت نشد."
+        gid = g[0]
+        exists = c.execute(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?",
+            (gid, user_id),
+        ).fetchone()
+        if exists:
+            return group_get(gid, user_id), ""
+        c.execute(
+            "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
+            (gid, user_id),
+        )
+    return group_get(gid, user_id), ""
+
+
+def group_leave(group_id: int, user_id: int) -> tuple[bool, str]:
+    """ترک گروه. اگر سازنده باشد گروه حذف می‌شود."""
+    with get_conn() as c:
+        creator = c.execute(
+            "SELECT created_by_id FROM groups WHERE id = ?", (group_id,)
+        ).fetchone()
+        if not creator:
+            return False, "گروه یافت نشد."
+        if creator[0] == user_id:
+            c.execute("DELETE FROM groups WHERE id = ?", (group_id,))
+            return True, ""
+        c.execute(
+            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
+            (group_id, user_id),
+        )
+    return True, ""
+
+
+def group_messages_list(group_id: int, user_id: int) -> list[dict]:
+    """پیام‌های گروه (فقط اگر عضو باشد)."""
+    if not group_is_member(group_id, user_id):
+        return []
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(group_messages)")
+        cols = [r[1] for r in cur.fetchall()]
+        deleted_clause = " AND deleted_at IS NULL" if "deleted_at" in cols else ""
+        rows = c.execute(
+            """SELECT id, sender_id, body_encrypted, created_at, message_type, file_path, file_name, mime_type
+               FROM group_messages WHERE group_id = ? """ + deleted_clause + """ ORDER BY created_at""",
+            (group_id,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        body = decrypt_message(r[2]) if r[2] else ""
+        if body is None:
+            body = "[پیام رمزنگاری‌شده قابل نمایش نیست]"
+        msg_type = (r[4] if len(r) > 4 else None) or "text"
+        out.append({
+            "id": r[0],
+            "sender_id": r[1],
+            "body": body.strip() if body and body != " " else "",
+            "created_at": r[3],
+            "message_type": msg_type,
+            "file_path": r[5] if len(r) > 5 else None,
+            "file_name": (r[6] if len(r) > 6 else None) or "",
+            "mime_type": (r[7] if len(r) > 7 else None) or "",
+        })
+    return out
+
+
+def group_message_send(group_id: int, sender_id: int, body: str) -> bool:
+    if not group_is_member(group_id, sender_id):
+        return False
+    import config
+    if not body or len(body) > config.MAX_MESSAGE_LEN:
+        return False
+    enc = encrypt_message(body)
+    if enc is None:
+        return False
+    with get_conn() as c:
+        c.execute(
+            """INSERT INTO group_messages (group_id, sender_id, body_encrypted) VALUES (?, ?, ?)""",
+            (group_id, sender_id, enc),
+        )
+    return True
+
+
+def group_message_send_media(
+    group_id: int,
+    sender_id: int,
+    caption: str,
+    message_type: str,
+    file_path: str,
+    file_name: str,
+    mime_type: str,
+) -> bool:
+    if not group_is_member(group_id, sender_id):
+        return False
+    import config
+    caption = (caption or "").strip()[: config.MAX_MESSAGE_LEN]
+    enc = encrypt_message(caption or " ")
+    if enc is None:
+        enc = encrypt_message(" ")
+    if enc is None:
+        return False
+    with get_conn() as c:
+        c.execute(
+            """INSERT INTO group_messages (group_id, sender_id, body_encrypted, message_type, file_path, file_name, mime_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (group_id, sender_id, enc, message_type, file_path, file_name or "", mime_type or ""),
+        )
+    return True
+
+
+def get_group_message_by_id(msg_id: int) -> dict | None:
+    with get_conn() as c:
+        row = c.execute(
+            """SELECT id, group_id, sender_id, message_type, file_path, file_name, mime_type
+               FROM group_messages WHERE id = ?""",
+            (msg_id,),
+        ).fetchone()
+        if not row or not row[4]:
+            return None
+        return {
+            "id": row[0],
+            "group_id": row[1],
+            "sender_id": row[2],
+            "message_type": row[3],
+            "file_path": row[4],
+            "file_name": row[5] or "",
+            "mime_type": row[6] or "",
+        }
+
+
+def group_message_delete(message_id: int, user_id: int) -> bool:
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(group_messages)")
+        if "deleted_at" not in [r[1] for r in cur.fetchall()]:
+            return False
+        r = c.execute(
+            "SELECT sender_id FROM group_messages WHERE id = ?", (message_id,)
+        ).fetchone()
+        if not r or r[0] != user_id:
+            return False
+        c.execute(
+            "UPDATE group_messages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (message_id,),
+        )
+    return True

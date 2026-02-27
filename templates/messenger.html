@@ -165,6 +165,22 @@ html.theme-light .pwa-install-banner { background: linear-gradient(135deg, #f1f5
 }
 .drawer-new-chat .open-error { color: var(--danger); font-size: 0.85rem; margin-top: 0.25rem; }
 .drawer-new-chat .btn { width: 100%; margin-top: 0.25rem; }
+/* گروه‌ها در دراور */
+.drawer-new-group { padding: 0 1.25rem 1rem; }
+.drawer-new-group .drawer-item-action { margin-bottom: 0.35rem; }
+.drawer-create-group-form,
+.drawer-invite-result,
+.drawer-join-group { margin-top: 0.5rem; }
+.drawer-create-group-form input,
+.drawer-join-group input { width: 100%; margin-bottom: 0.35rem; }
+.drawer-create-group-form .btn,
+.drawer-join-group .btn { width: 100%; }
+.invite-link-label { font-size: 0.85rem; color: var(--text-soft); margin: 0.5rem 0 0.25rem; }
+.invite-link-wrap { display: flex; gap: 0.35rem; margin-bottom: 0.35rem; }
+.invite-link-wrap input { flex: 1; font-size: 0.8rem; }
+.drawer-groups-list { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+.drawer-groups-list .history-item { margin-bottom: 0.35rem; }
+.drawer-groups-list .history-item .h-avatar { background: linear-gradient(135deg, var(--tg-accent), #229ED9); }
 
 /* ——— صفحه تنظیمات (درون مسنجر) ——— */
 .settings-panel {
@@ -533,6 +549,7 @@ html.theme-light .pwa-install-banner {
 }
 .msg .msg-del:hover { opacity: 1; background: rgba(0,0,0,0.2); }
 .msg .msg-read { font-size: 0.7rem; margin-top: 0.2rem; opacity: 0.9; }
+.msg .msg-sender-name { font-size: 0.75rem; font-weight: 600; color: var(--tg-accent); margin-bottom: 0.2rem; display: block; }
 /* ——— فرم ارسال (سبک تلگرام) ——— */
 .chat-form {
     display: flex;
@@ -1058,10 +1075,14 @@ html.theme-light .pwa-install-banner {
         <div class="chat-active" id="chatActive">
             <div class="chat-with" id="chatHeader">
                 <span id="chatHeaderTitle"></span>
-                <div class="chat-with-actions">
+                <div class="chat-with-actions chat-actions-1-1" id="chatHeaderActions1">
                     <button type="button" class="btn-icon-small" id="chatSearchToggle" title="جستجو در چت">🔍</button>
                     <button type="button" class="btn-icon-small" id="chatClearChatBtn" title="حذف گفتگو">🗑</button>
                     <button type="button" class="btn btn-ghost btn-sm" id="blockBtn" style="display: none;">مسدود</button>
+                </div>
+                <div class="chat-with-actions chat-actions-group" id="chatHeaderActionsGroup" style="display: none;">
+                    <button type="button" class="btn btn-ghost btn-sm" id="groupInviteLinkBtn" title="کپی لینک دعوت">🔗 لینک دعوت</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="groupLeaveBtn" title="ترک گروه">ترک گروه</button>
                 </div>
             </div>
             <div class="chat-search-in-chat" id="chatSearchInChat">
@@ -1136,6 +1157,32 @@ html.theme-light .pwa-install-banner {
             <button type="button" class="btn" id="drawerOpenChat">باز کردن چت</button>
             <span class="open-error" id="drawerOpenError"></span>
         </div>
+        <div class="drawer-section-title">گروه‌ها</div>
+        <div class="drawer-new-group">
+            <button type="button" class="drawer-item drawer-item-action" id="drawerNewGroupBtn">
+                <span class="icon">➕</span>
+                <span>ساخت گروه جدید</span>
+            </button>
+            <div class="drawer-create-group-form" id="drawerCreateGroupForm" style="display: none;">
+                <input type="text" id="drawerGroupName" placeholder="نام گروه" maxlength="128">
+                <button type="button" class="btn btn-sm" id="drawerCreateGroupSubmit">ساخت گروه</button>
+                <span class="open-error" id="drawerGroupError"></span>
+            </div>
+            <div class="drawer-invite-result" id="drawerInviteResult" style="display: none;">
+                <p class="invite-link-label">لینک دعوت (برای دوستان بفرستید):</p>
+                <div class="invite-link-wrap">
+                    <input type="text" id="drawerInviteLink" readonly>
+                    <button type="button" class="btn btn-sm" id="drawerCopyInviteLink">کپی</button>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" id="drawerOpenGroupAfterCreate">باز کردن گروه</button>
+            </div>
+            <div class="drawer-join-group">
+                <input type="text" id="drawerJoinCode" placeholder="کد یا لینک دعوت" dir="ltr" style="text-align: left;">
+                <button type="button" class="btn btn-sm" id="drawerJoinGroupBtn">عضویت در گروه</button>
+                <span class="open-error" id="drawerJoinError"></span>
+            </div>
+            <ul class="drawer-groups-list" id="groupsList"></ul>
+        </div>
         <div class="drawer-section-title">منو</div>
         <div class="drawer-body">
             <button type="button" class="drawer-item" id="drawerConversations">
@@ -1170,6 +1217,8 @@ html.theme-light .pwa-install-banner {
 const userId = {{ user_id | default(0) }};
 const username = {{ username | tojson }};
 const csrfToken = {{ csrf_token | tojson }};
+const initialGroupId = {{ initial_group_id | default(0) or 0 }};
+const joinError = {% if join_error %}{{ join_error | tojson }}{% else %}null{% endif %};
 
 const backBtn = document.getElementById('backBtn');
 const headerTitle = document.getElementById('headerTitle');
@@ -1238,8 +1287,25 @@ const historyEmpty = document.getElementById('historyEmpty');
 const convoSearch = document.getElementById('convoSearch');
 const convoSearchBtn = document.getElementById('convoSearchBtn');
 const chatHeaderTitle = document.getElementById('chatHeaderTitle');
+const chatHeaderActions1 = document.getElementById('chatHeaderActions1');
+const chatHeaderActionsGroup = document.getElementById('chatHeaderActionsGroup');
+const groupInviteLinkBtn = document.getElementById('groupInviteLinkBtn');
+const groupLeaveBtn = document.getElementById('groupLeaveBtn');
 const blockBtn = document.getElementById('blockBtn');
 const btnNotify = document.getElementById('btnNotify');
+const groupsList = document.getElementById('groupsList');
+const drawerNewGroupBtn = document.getElementById('drawerNewGroupBtn');
+const drawerCreateGroupForm = document.getElementById('drawerCreateGroupForm');
+const drawerGroupName = document.getElementById('drawerGroupName');
+const drawerCreateGroupSubmit = document.getElementById('drawerCreateGroupSubmit');
+const drawerGroupError = document.getElementById('drawerGroupError');
+const drawerInviteResult = document.getElementById('drawerInviteResult');
+const drawerInviteLink = document.getElementById('drawerInviteLink');
+const drawerCopyInviteLink = document.getElementById('drawerCopyInviteLink');
+const drawerOpenGroupAfterCreate = document.getElementById('drawerOpenGroupAfterCreate');
+const drawerJoinCode = document.getElementById('drawerJoinCode');
+const drawerJoinGroupBtn = document.getElementById('drawerJoinGroupBtn');
+const drawerJoinError = document.getElementById('drawerJoinError');
 const themeDark = document.getElementById('themeDark');
 const themeLight = document.getElementById('themeLight');
 const metaThemeColor = document.getElementById('metaThemeColor');
@@ -1262,6 +1328,9 @@ initTheme();
 var viewMode = 'list';
 let currentOtherId = null;
 let currentOtherName = null;
+let currentGroupId = null;
+let currentGroupName = null;
+let currentGroupInviteCode = null;
 let selectedFile = null;
 let iBlockedThem = false;
 let isVoiceRecording = false;
@@ -1286,7 +1355,8 @@ function stopChatPoll() {
 function startChatPoll() {
     if (chatPollInterval) return;
     chatPollInterval = setInterval(function() {
-        if (currentOtherId) loadChat(true);
+        if (viewMode === 'group' && currentGroupId) loadGroupChat(true);
+        else if (currentOtherId) loadChat(true);
     }, 3500);
 }
 
@@ -1303,7 +1373,7 @@ function showView(mode) {
     viewMode = mode;
     if (chatPlaceholder) chatPlaceholder.style.display = (mode === 'list') ? 'flex' : 'none';
     if (chatActive) {
-        if (mode === 'chat') {
+        if (mode === 'chat' || mode === 'group') {
             chatActive.classList.add('visible');
             chatActive.style.display = 'flex';
         } else {
@@ -1321,17 +1391,21 @@ function showView(mode) {
         }
     }
     if (hamburgerBtn) {
-        hamburgerBtn.classList.toggle('hidden', mode === 'chat');
+        hamburgerBtn.classList.toggle('hidden', mode === 'chat' || mode === 'group');
     }
     if (backBtn) {
-        backBtn.classList.toggle('visible', mode === 'chat' || mode === 'settings');
+        backBtn.classList.toggle('visible', mode === 'chat' || mode === 'settings' || mode === 'group');
     }
     if (headerTitle) {
         if (mode === 'list') headerTitle.textContent = 'مسنجر';
         else if (mode === 'settings') headerTitle.textContent = 'تنظیمات';
         else if (mode === 'chat' && currentOtherName) headerTitle.textContent = currentOtherName;
+        else if (mode === 'group' && currentGroupName) headerTitle.textContent = currentGroupName;
     }
-    if (headerActions) headerActions.innerHTML = '';
+    var isGroup = (mode === 'group');
+    if (chatHeaderActions1) chatHeaderActions1.style.display = isGroup ? 'none' : 'flex';
+    if (chatHeaderActionsGroup) chatHeaderActionsGroup.style.display = isGroup ? 'flex' : 'none';
+    if (chatSearchInChat) chatSearchInChat.classList.remove('visible');
 }
 
 function showToast(msg) {
@@ -1542,19 +1616,20 @@ if (voicePreviewPlayBtn && voicePreviewAudio) {
 }
 if (btnSendVoice) {
     btnSendVoice.addEventListener('click', async function() {
-        if (!voiceBlob || !currentOtherId) return;
+        if (!voiceBlob) return;
         var fd = new FormData();
         fd.append('file', voiceBlob, 'voice.webm');
-        fd.append('receiver_id', currentOtherId);
         fd.append('message_type', 'voice');
         fd.append('csrf_token', csrfToken);
         btnSendVoice.disabled = true;
+        var url = currentGroupId ? ('/api/groups/' + currentGroupId + '/send') : '/api/send';
+        if (!currentGroupId) fd.append('receiver_id', currentOtherId);
         try {
-            var r = await fetch('/api/send', { method: 'POST', body: fd });
+            var r = await fetch(url, { method: 'POST', body: fd });
             var res = await r.json();
             if (res.ok) {
                 hideVoicePreview();
-                loadChat();
+                if (currentGroupId) loadGroupChat(); else loadChat();
                 showToast('ویس ارسال شد');
             } else {
                 showToast(res.error || 'خطا در ارسال ویس');
@@ -1571,7 +1646,7 @@ if (btnCancelVoice) {
 function updateMicPermissionCard() {
     if (!micPermissionCard || !chatActive) return;
     var hasRequested = localStorage.getItem(MIC_PERMISSION_KEY) === '1';
-    var chatOpen = chatActive.classList.contains('visible') && currentOtherId;
+    var chatOpen = chatActive.classList.contains('visible') && (currentOtherId || currentGroupId);
     if (!chatOpen || hasRequested) {
         micPermissionCard.style.display = 'none';
         return;
@@ -1671,7 +1746,9 @@ function loadConversations(q) {
                 });
                 el.addEventListener('click', function(e) {
                     if (e.target.closest('.h-delete')) return;
-                    if (id !== id) return;
+                    currentGroupId = null;
+                    currentGroupName = null;
+                    currentGroupInviteCode = null;
                     currentOtherId = id;
                     currentOtherName = name;
                     lastChatMessageCount = 0;
@@ -1690,6 +1767,117 @@ function loadConversations(q) {
         });
 }
 
+function loadGroupsList() {
+    if (!groupsList) return;
+    fetch('/api/groups')
+        .then(function(r) { return r.json(); })
+        .then(function(list) {
+            if (!Array.isArray(list) || list.length === 0) {
+                groupsList.innerHTML = '';
+                return;
+            }
+            groupsList.innerHTML = list.map(function(g) {
+                var name = escapeHtml(g.name || 'گروه');
+                var preview = escapeHtml(g.last_preview || '');
+                var initial = (g.name || 'گ').charAt(0).toUpperCase();
+                var code = (g.invite_code || '');
+                return '<li class="history-item" data-group-id="' + g.id + '" data-group-name="' + name + '" data-invite-code="' + escapeHtml(code) + '" style="animation-delay: 0s">' +
+                    '<div class="h-avatar">' + initial + '</div>' +
+                    '<div class="h-body"><div class="h-username">' + name + '</div><div class="h-preview">' + preview + '</div></div></li>';
+            }).join('');
+            groupsList.querySelectorAll('.history-item').forEach(function(el) {
+                var gid = parseInt(el.getAttribute('data-group-id'), 10);
+                var gname = el.getAttribute('data-group-name') || '';
+                var code = el.getAttribute('data-invite-code') || '';
+                el.addEventListener('click', function() {
+                    currentGroupId = gid;
+                    currentGroupName = gname;
+                    currentGroupInviteCode = code;
+                    currentOtherId = null;
+                    currentOtherName = null;
+                    closeDrawer();
+                    showView('group');
+                    if (chatHeaderTitle) chatHeaderTitle.textContent = gname;
+                    loadGroupChat();
+                    updateMicPermissionCard();
+                });
+            });
+        })
+        .catch(function() { groupsList.innerHTML = ''; });
+}
+
+function buildGroupMessageHtml(m, senders) {
+    var sent = m.sender_id === userId;
+    var cls = sent ? 'sent' : 'received';
+    var senderName = (senders && senders[m.sender_id]) ? senders[m.sender_id] : ('کاربر ' + m.sender_id);
+    var parts = [];
+    if (sent && m.id) {
+        parts.push('<button type="button" class="msg-del btn btn-ghost" data-msg-id="' + m.id + '" title="حذف پیام">×</button>');
+    }
+    if (!sent) parts.push('<span class="msg-sender-name">' + escapeHtml(senderName) + '</span>');
+    if (m.message_type === 'image' && m.id) {
+        parts.push('<img class="msg-img" src="/api/group-file/' + m.id + '" alt="عکس" loading="lazy">');
+    }
+    if (m.message_type === 'voice' && m.id) {
+        var bars = [];
+        for (var i = 0; i < 20; i++) bars.push('<span style="height:' + (30 + (m.id + i) % 70) + '%" data-idx="' + i + '"></span>');
+        parts.push('<div class="voice-msg-bubble" data-msg-id="' + m.id + '">' +
+            '<button type="button" class="voice-play-btn" aria-label="پخش">▶</button>' +
+            '<div class="voice-waveform">' + bars.join('') + '</div>' +
+            '<span class="voice-duration">0:00</span>' +
+            '<audio preload="metadata" src="/api/group-file/' + m.id + '" data-msg-id="' + m.id + '"></audio></div>');
+    }
+    if (m.message_type === 'file' && m.id && m.file_name) {
+        parts.push('<a class="msg-file" href="/api/group-file/' + m.id + '" download="' + escapeHtml(m.file_name) + '">' + escapeHtml(m.file_name) + '</a>');
+    }
+    if (m.body) parts.push(escapeHtml(m.body));
+    if (parts.length === 0) parts.push('[پیام]');
+    parts.push('<time>' + escapeHtml(m.created_at) + '</time>');
+    return '<div class="msg ' + cls + '" data-msg-id="' + (m.id || '') + '">' + parts.join('') + '</div>';
+}
+
+var lastGroupMessageCount = 0;
+var lastGroupLastId = 0;
+function loadGroupChat(isPolling) {
+    if (!currentGroupId) return;
+    var wasAtBottom = !isPolling || (chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 80);
+    fetch('/api/groups/' + currentGroupId + '/messages')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                if (!isPolling) chatMessages.innerHTML = '<p class="error">' + escapeHtml(data.error) + '</p>';
+                return;
+            }
+            var messages = data.messages || [];
+            var senders = data.senders || {};
+            var maxId = 0;
+            messages.forEach(function(m) { if (m.id > maxId) maxId = m.id; });
+            var sameContent = isPolling && messages.length === lastGroupMessageCount && maxId === lastGroupLastId;
+            if (sameContent) return;
+            lastGroupMessageCount = messages.length;
+            lastGroupLastId = maxId;
+            chatMessages.innerHTML = messages.map(function(m) { return buildGroupMessageHtml(m, senders); }).join('');
+            initVoiceBubbles();
+            chatMessages.querySelectorAll('.msg-del').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var mid = parseInt(btn.getAttribute('data-msg-id'), 10);
+                    if (mid !== mid) return;
+                    fetch('/api/groups/' + currentGroupId + '/message/' + mid, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRF-Token': csrfToken }
+                    }).then(function(r) { return r.json(); }).then(function(res) {
+                        if (res.ok) {
+                            var el = chatMessages.querySelector('.msg[data-msg-id="' + mid + '"]');
+                            if (el) el.remove();
+                        } else { showToast(res.error || 'خطا'); }
+                    });
+                });
+            });
+            if (wasAtBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
+            if (!isPolling) startChatPoll();
+        });
+}
+
 if (convoSearchBtn && convoSearch) {
     convoSearchBtn.addEventListener('click', function() { loadConversations(convoSearch.value.trim()); });
     convoSearch.addEventListener('keydown', function(e) { if (e.key === 'Enter') loadConversations(convoSearch.value.trim()); });
@@ -1705,8 +1893,16 @@ backBtn.addEventListener('click', function() {
         clearAttachmentStrip();
         showOpenError('');
     }
+    if (viewMode === 'group') {
+        stopChatPoll();
+        currentGroupId = null;
+        currentGroupName = null;
+        currentGroupInviteCode = null;
+        clearAttachmentStrip();
+    }
     showView('list');
     loadConversations();
+    loadGroupsList();
 });
 
 if (drawerOpenChat) {
@@ -1760,6 +1956,150 @@ if (drawerSettings) {
         if (btnNotifySettings && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             btnNotifySettings.textContent = 'فعال';
         }
+    });
+}
+
+if (drawerNewGroupBtn && drawerCreateGroupForm) {
+    drawerNewGroupBtn.addEventListener('click', function() {
+        drawerCreateGroupForm.style.display = drawerCreateGroupForm.style.display === 'none' ? 'block' : 'none';
+        if (drawerGroupError) drawerGroupError.textContent = '';
+        if (drawerInviteResult) drawerInviteResult.style.display = 'none';
+    });
+}
+if (drawerCreateGroupSubmit && drawerGroupName) {
+    drawerCreateGroupSubmit.addEventListener('click', async function() {
+        var name = (drawerGroupName.value || '').trim();
+        if (drawerGroupError) drawerGroupError.textContent = '';
+        if (!name) { if (drawerGroupError) drawerGroupError.textContent = 'نام گروه را وارد کنید.'; return; }
+        drawerCreateGroupSubmit.disabled = true;
+        try {
+            var r = await fetch('/api/groups', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                body: JSON.stringify({ name: name })
+            });
+            var res = await r.json();
+            if (res.ok && res.group && res.invite_link) {
+                if (drawerCreateGroupForm) drawerCreateGroupForm.style.display = 'none';
+                if (drawerInviteResult) {
+                    drawerInviteResult.style.display = 'block';
+                    if (drawerInviteLink) drawerInviteLink.value = res.invite_link;
+                    currentGroupId = res.group.id;
+                    currentGroupName = res.group.name;
+                    currentGroupInviteCode = res.group.invite_code;
+                }
+            } else {
+                if (drawerGroupError) drawerGroupError.textContent = res.error || 'خطا در ساخت گروه';
+            }
+        } finally { drawerCreateGroupSubmit.disabled = false; }
+    });
+}
+if (drawerCopyInviteLink && drawerInviteLink) {
+    drawerCopyInviteLink.addEventListener('click', function() {
+        drawerInviteLink.select();
+        document.execCommand('copy');
+        showToast('لینک کپی شد');
+    });
+}
+if (drawerOpenGroupAfterCreate) {
+    drawerOpenGroupAfterCreate.addEventListener('click', function() {
+        if (!currentGroupId) return;
+        closeDrawer();
+        showView('group');
+        if (chatHeaderTitle) chatHeaderTitle.textContent = currentGroupName || 'گروه';
+        drawerInviteResult.style.display = 'none';
+        if (drawerGroupName) drawerGroupName.value = '';
+        loadGroupChat();
+        loadGroupsList();
+        updateMicPermissionCard();
+    });
+}
+if (drawerJoinGroupBtn && drawerJoinCode) {
+    drawerJoinGroupBtn.addEventListener('click', async function() {
+        var raw = (drawerJoinCode.value || '').trim();
+        if (drawerJoinError) drawerJoinError.textContent = '';
+        var code = raw.replace(/.*\/join\//i, '').split('?')[0].trim();
+        if (!code) { if (drawerJoinError) drawerJoinError.textContent = 'کد یا لینک دعوت را وارد کنید.'; return; }
+        drawerJoinGroupBtn.disabled = true;
+        try {
+            var r = await fetch('/api/groups/join', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                body: JSON.stringify({ invite_code: code })
+            });
+            var res = await r.json();
+            if (res.ok && res.group) {
+                currentGroupId = res.group.id;
+                currentGroupName = res.group.name;
+                currentGroupInviteCode = res.group.invite_code;
+                if (drawerJoinCode) drawerJoinCode.value = '';
+                closeDrawer();
+                showView('group');
+                if (chatHeaderTitle) chatHeaderTitle.textContent = currentGroupName;
+                loadGroupChat();
+                loadGroupsList();
+                updateMicPermissionCard();
+                showToast('به گروه پیوستید');
+            } else {
+                if (drawerJoinError) drawerJoinError.textContent = res.error || 'خطا در عضویت';
+            }
+        } finally { drawerJoinGroupBtn.disabled = false; }
+    });
+}
+
+if (groupInviteLinkBtn) {
+    groupInviteLinkBtn.addEventListener('click', function() {
+        if (!currentGroupId) return;
+        if (currentGroupInviteCode) {
+            var link = window.location.origin + '/join/' + currentGroupInviteCode;
+            navigator.clipboard.writeText(link).then(function() { showToast('لینک کپی شد'); }).catch(function() {
+                var inp = document.createElement('input');
+                inp.value = link;
+                document.body.appendChild(inp);
+                inp.select();
+                document.execCommand('copy');
+                document.body.removeChild(inp);
+                showToast('لینک کپی شد');
+            });
+            return;
+        }
+        fetch('/api/groups/' + currentGroupId).then(function(r) { return r.json(); }).then(function(g) {
+            if (g && g.invite_code) {
+                currentGroupInviteCode = g.invite_code;
+                var link = window.location.origin + '/join/' + g.invite_code;
+                navigator.clipboard.writeText(link).then(function() { showToast('لینک کپی شد'); }).catch(function() {
+                    var inp = document.createElement('input');
+                    inp.value = link;
+                    document.body.appendChild(inp);
+                    inp.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(inp);
+                    showToast('لینک کپی شد');
+                });
+            } else { showToast('خطا در دریافت لینک'); }
+        });
+    });
+}
+if (groupLeaveBtn) {
+    groupLeaveBtn.addEventListener('click', function() {
+        if (!currentGroupId) return;
+        if (!confirm('از گروه خارج شوید؟')) return;
+        fetch('/api/groups/' + currentGroupId + '/leave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({})
+        }).then(function(r) { return r.json(); }).then(function(res) {
+            if (res.ok) {
+                stopChatPoll();
+                currentGroupId = null;
+                currentGroupName = null;
+                currentGroupInviteCode = null;
+                showView('list');
+                loadGroupsList();
+                loadConversations();
+                showToast('از گروه خارج شدید');
+            } else { showToast(res.error || 'خطا'); }
+        });
     });
 }
 if (btnNotifySettings) {
@@ -2018,6 +2358,23 @@ if (btnNotify) {
 
 showView('list');
 loadConversations();
+loadGroupsList();
+if (joinError) showToast(joinError);
+if (initialGroupId) {
+    fetch('/api/groups/' + initialGroupId)
+        .then(function(r) { return r.json(); })
+        .then(function(g) {
+            if (g && g.id) {
+                currentGroupId = g.id;
+                currentGroupName = g.name;
+                currentGroupInviteCode = g.invite_code || null;
+                showView('group');
+                if (chatHeaderTitle) chatHeaderTitle.textContent = g.name;
+                loadGroupChat();
+                updateMicPermissionCard();
+            }
+        });
+}
 
 (function() {
     var PWA_DISMISS_KEY = 'pwa_install_dismissed';
@@ -2072,10 +2429,44 @@ loadConversations();
 
 chatForm.addEventListener('submit', async function(e) {
     e.preventDefault();
-    if (!currentOtherId) return;
     var body = msgInput.value.trim();
     var btn = chatForm.querySelector('button[type="submit"]');
 
+    if (currentGroupId) {
+        if (selectedFile) {
+            btn.disabled = true;
+            var fd = new FormData();
+            fd.append('file', selectedFile);
+            fd.append('body', body);
+            fd.append('csrf_token', csrfToken);
+            try {
+                var r = await fetch('/api/groups/' + currentGroupId + '/send', { method: 'POST', body: fd });
+                var res = await r.json();
+                if (res.ok) {
+                    msgInput.value = '';
+                    clearAttachmentStrip();
+                    loadGroupChat();
+                } else { showToast(res.error || 'خطا در ارسال'); }
+            } finally { btn.disabled = false; }
+        } else {
+            if (!body) return;
+            btn.disabled = true;
+            try {
+                var r = await fetch('/api/groups/' + currentGroupId + '/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                    body: JSON.stringify({ body: body })
+                });
+                var res = await r.json();
+                if (res.ok) { msgInput.value = ''; loadGroupChat(); }
+                else { showToast(res.error || 'خطا در ارسال'); }
+            } finally { btn.disabled = false; }
+            return;
+        }
+        return;
+    }
+
+    if (!currentOtherId) return;
     if (selectedFile) {
         btn.disabled = true;
         var fd = new FormData();
@@ -2090,36 +2481,22 @@ chatForm.addEventListener('submit', async function(e) {
                 msgInput.value = '';
                 clearAttachmentStrip();
                 loadChat();
-            } else {
-                showToast(res.error || 'خطا در ارسال');
-            }
-        } finally {
-            btn.disabled = false;
-        }
+            } else { showToast(res.error || 'خطا در ارسال'); }
+        } finally { btn.disabled = false; }
         return;
     }
-
     if (!body) return;
     btn.disabled = true;
     try {
         var r = await fetch('/api/send', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': csrfToken
-            },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
             body: JSON.stringify({ receiver_id: currentOtherId, body: body })
         });
         var res = await r.json();
-        if (res.ok) {
-            msgInput.value = '';
-            loadChat();
-        } else {
-            showToast(res.error || 'خطا در ارسال');
-        }
-    } finally {
-        btn.disabled = false;
-    }
+        if (res.ok) { msgInput.value = ''; loadChat(); }
+        else { showToast(res.error || 'خطا در ارسال'); }
+    } finally { btn.disabled = false; }
 });
 </script>
 {% endblock %}
