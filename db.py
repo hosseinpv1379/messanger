@@ -358,7 +358,7 @@ def get_public_keys_for_users(user_ids: list[int]) -> dict[int, str]:
             ).fetchone()
             if row:
                 import base64
-                out[uid] = base64.encodebytes(row[0]).decode().strip()
+                out[uid] = base64.b64encode(row[0]).decode()
     return out
 
 
@@ -454,7 +454,7 @@ def messages_for_user(user_id: int, other_id: int | None = None, include_e2ee_ra
         body_e2ee = ""
         if is_e2ee and include_e2ee_raw and other_id is not None and r[3]:
             body = ""
-            body_e2ee = base64.encodebytes(r[3]).decode().strip()
+            body_e2ee = base64.b64encode(r[3]).decode()
         else:
             if is_e2ee:
                 body = "[پیام رمزنگاری‌شده — فقط در دستگاه شما و طرف مقابل قابل خواندن است]"
