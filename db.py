@@ -603,35 +603,61 @@ def message_send_media(
     file_path: str,
     file_name: str,
     mime_type: str,
+    caption_e2ee_blob: bytes | None = None,
+    is_e2ee: bool = False,
 ) -> bool:
     if is_blocked(receiver_id, sender_id):
         return False
     import config
-    caption = (caption or "").strip()[: config.MAX_MESSAGE_LEN]
-    enc = encrypt_message(caption or " ")
-    if enc is None:
-        enc = encrypt_message(" ")
-    if enc is None:
-        return False
+    if caption_e2ee_blob is not None and is_e2ee:
+        body_blob = caption_e2ee_blob
+        e2ee_flag = 1
+    else:
+        caption = (caption or "").strip()[: config.MAX_MESSAGE_LEN]
+        enc = encrypt_message(caption or " ")
+        if enc is None:
+            enc = encrypt_message(" ")
+        if enc is None:
+            return False
+        body_blob = enc
+        e2ee_flag = 0
     with get_conn() as c:
-        c.execute(
-            """INSERT INTO messages (sender_id, receiver_id, body_encrypted, message_type, file_path, file_name, mime_type)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (sender_id, receiver_id, enc, message_type, file_path, file_name or "", mime_type or ""),
-        )
+        cur = c.execute("PRAGMA table_info(messages)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "is_e2ee" in cols:
+            c.execute(
+                """INSERT INTO messages (sender_id, receiver_id, body_encrypted, message_type, file_path, file_name, mime_type, is_e2ee)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (sender_id, receiver_id, body_blob, message_type, file_path, file_name or "", mime_type or "", e2ee_flag),
+            )
+        else:
+            c.execute(
+                """INSERT INTO messages (sender_id, receiver_id, body_encrypted, message_type, file_path, file_name, mime_type)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (sender_id, receiver_id, body_blob, message_type, file_path, file_name or "", mime_type or ""),
+            )
     return True
 
 
 def get_message_by_id(msg_id: int) -> dict | None:
-    """برای سرو کردن فایل: فقط فیلدهای لازم."""
+    """برای سرو کردن فایل: فقط فیلدهای لازم. is_e2ee برای برگرداندن فایل بدون رمزگشایی سرور."""
     with get_conn() as c:
-        row = c.execute(
-            "SELECT id, sender_id, receiver_id, message_type, file_path, file_name, mime_type FROM messages WHERE id = ?",
-            (msg_id,),
-        ).fetchone()
-        if not row or not row[4]:  # no file_path
+        cur = c.execute("PRAGMA table_info(messages)")
+        cols = [r[1] for r in cur.fetchall()]
+        has_e2ee = "is_e2ee" in cols
+        if has_e2ee:
+            row = c.execute(
+                "SELECT id, sender_id, receiver_id, message_type, file_path, file_name, mime_type, is_e2ee FROM messages WHERE id = ?",
+                (msg_id,),
+            ).fetchone()
+        else:
+            row = c.execute(
+                "SELECT id, sender_id, receiver_id, message_type, file_path, file_name, mime_type FROM messages WHERE id = ?",
+                (msg_id,),
+            ).fetchone()
+        if not row or not row[4]:
             return None
-        return {
+        out = {
             "id": row[0],
             "sender_id": row[1],
             "receiver_id": row[2],
@@ -640,6 +666,11 @@ def get_message_by_id(msg_id: int) -> dict | None:
             "file_name": row[5] or "",
             "mime_type": row[6] or "",
         }
+        if has_e2ee and len(row) > 7:
+            out["is_e2ee"] = bool(row[7])
+        else:
+            out["is_e2ee"] = False
+        return out
 
 
 def message_delete(message_id: int, user_id: int) -> bool:

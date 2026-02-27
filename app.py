@@ -486,10 +486,13 @@ def api_send():
         return jsonify({"ok": False, "error": "درخواست نامعتبر."}), 403
     uid = session["user_id"]
 
-    # ارسال مدیا (عکس/فایل) با multipart
+    # ارسال مدیا (عکس/فایل) با multipart — پشتیبانی از E2EE: کلاینت فایل رمزشده می‌فرستد، سرور ذخیره می‌کند بدون دسترسی به محتوا
     if request.files:
+        import base64
         f = request.files.get("file")
         receiver_id = request.form.get("receiver_id", type=int)
+        e2ee_media = request.form.get("e2ee_media") == "1"
+        caption_e2ee_b64 = request.form.get("caption_e2ee") or ""
         caption = (request.form.get("body") or request.form.get("caption") or "").strip()[: config.MAX_MESSAGE_LEN]
         if not f or not receiver_id:
             return jsonify({"ok": False, "error": "فایل یا گیرنده مشخص نیست"}), 400
@@ -521,15 +524,26 @@ def api_send():
         config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         safe_name = f"{uuid.uuid4().hex}{ext}"
         file_path = config.UPLOAD_DIR / safe_name
-        enc_content = encrypt_bytes(content)
-        if not enc_content:
-            return jsonify({"ok": False, "error": "خطا در رمزنگاری فایل"}), 500
-        file_path.write_bytes(enc_content)
-        rel_path = safe_name
-        mime = (getattr(f, "content_type") or "") or ("image/jpeg" if message_type == "image" else "application/octet-stream")
-        if not db.message_send_media(uid, receiver_id, caption, message_type, str(rel_path), fn, mime):
-            file_path.unlink(missing_ok=True)
-            return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
+        if e2ee_media:
+            file_path.write_bytes(content)
+            caption_e2ee_blob = None
+            if caption_e2ee_b64:
+                try:
+                    caption_e2ee_blob = base64.b64decode((caption_e2ee_b64 or "").encode() if isinstance(caption_e2ee_b64, str) else caption_e2ee_b64)
+                except Exception:
+                    caption_e2ee_blob = None
+            if not db.message_send_media(uid, receiver_id, "", message_type, str(safe_name), fn, request.form.get("mime_type") or "application/octet-stream", caption_e2ee_blob=caption_e2ee_blob, is_e2ee=True):
+                file_path.unlink(missing_ok=True)
+                return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
+        else:
+            enc_content = encrypt_bytes(content)
+            if not enc_content:
+                return jsonify({"ok": False, "error": "خطا در رمزنگاری فایل"}), 500
+            file_path.write_bytes(enc_content)
+            mime = (getattr(f, "content_type") or "") or ("image/jpeg" if message_type == "image" else "application/octet-stream")
+            if not db.message_send_media(uid, receiver_id, caption, message_type, str(safe_name), fn, mime):
+                file_path.unlink(missing_ok=True)
+                return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
         return jsonify({"ok": True})
 
     # ارسال متن ساده (JSON) — پشتیبانی از E2EE
@@ -626,7 +640,7 @@ def api_blocked_list():
 @app.route("/api/file/<int:message_id>")
 @user_required
 def api_file(message_id):
-    """سرو فایل/عکس پیام (فقط برای فرستنده یا گیرنده)."""
+    """سرو فایل/عکس پیام. اگر is_e2ee باشد سرور رمزگشایی نمی‌کند و خام برمی‌گرداند تا کلاینت رمزگشایی کند."""
     uid = session["user_id"]
     msg = db.get_message_by_id(message_id)
     if not msg or (msg["sender_id"] != uid and msg["receiver_id"] != uid):
@@ -634,8 +648,10 @@ def api_file(message_id):
     full_path = config.UPLOAD_DIR / msg["file_path"]
     if not full_path.exists():
         return jsonify({"error": "فایل یافت نشد"}), 404
-    enc = full_path.read_bytes()
-    data = decrypt_bytes(enc)
+    raw = full_path.read_bytes()
+    if msg.get("is_e2ee"):
+        return send_file(BytesIO(raw), mimetype="application/octet-stream", as_attachment=False, download_name="")
+    data = decrypt_bytes(raw)
     if not data:
         return jsonify({"error": "خطا در خواندن فایل"}), 500
     mime = msg["mime_type"] or "application/octet-stream"

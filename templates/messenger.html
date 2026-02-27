@@ -1465,6 +1465,33 @@ function encryptE2eeBody(plaintext, recipientPublicKey) {
     combined.set(box, 24);
     return uint8ToB64(combined);
 }
+function getE2eeSharedKey(theirPublicKey) {
+    if (typeof nacl === 'undefined' || !theirPublicKey) return null;
+    var kp = getE2EEKeyPair();
+    if (!kp) return null;
+    var pub = (typeof theirPublicKey === 'string') ? b64ToUint8(theirPublicKey) : theirPublicKey;
+    if (!pub || pub.length !== 32) return null;
+    return nacl.box.before(pub, kp.secretKey);
+}
+function encryptFileE2ee(fileBytes, recipientPublicKey) {
+    var shared = getE2eeSharedKey(recipientPublicKey);
+    if (!shared || typeof nacl.secretbox !== 'function') return null;
+    var nonce = nacl.randomBytes(24);
+    var box = nacl.secretbox(fileBytes, nonce, shared);
+    var out = new Uint8Array(24 + box.length);
+    out.set(nonce, 0);
+    out.set(box, 24);
+    return out;
+}
+function decryptFileE2ee(encryptedBytes, otherPublicKey, iAmSender) {
+    var shared = getE2eeSharedKey(otherPublicKey);
+    if (!shared || !encryptedBytes || encryptedBytes.length < 24 + 16) return null;
+    var nonce = encryptedBytes.slice(0, 24);
+    var cipher = encryptedBytes.slice(24);
+    try {
+        return nacl.secretbox.open(cipher, nonce, shared);
+    } catch (e) { return null; }
+}
 function prepareE2eeMessages(messages, publicKeys) {
     if (!messages || !publicKeys) return messages;
     for (var i = 0; i < messages.length; i++) {
@@ -2331,11 +2358,16 @@ function buildMessageHtml(m, otherReadUpTo) {
     var sent = m.sender_id === userId;
     var cls = sent ? 'sent' : 'received';
     var parts = [];
+    var e2eeMedia = m.is_e2ee && m.id && (m.message_type === 'image' || m.message_type === 'voice' || m.message_type === 'file');
     if (sent && m.id) {
         parts.push('<button type="button" class="msg-del btn btn-ghost" data-msg-id="' + m.id + '" title="حذف پیام">×</button>');
     }
     if (m.message_type === 'image' && m.id) {
-        parts.push('<img class="msg-img" src="/api/file/' + m.id + '" alt="عکس" loading="lazy">');
+        if (e2eeMedia) {
+            parts.push('<img class="msg-img msg-e2ee-media" data-msg-id="' + m.id + '" data-mime="' + escapeHtml(m.mime_type || 'image/jpeg') + '" alt="عکس" loading="lazy">');
+        } else {
+            parts.push('<img class="msg-img" src="/api/file/' + m.id + '" alt="عکس" loading="lazy">');
+        }
     }
     if (m.message_type === 'voice' && m.id) {
         var waveId = 'w' + m.id;
@@ -2344,17 +2376,32 @@ function buildMessageHtml(m, otherReadUpTo) {
             var h = (30 + (m.id + i) % 70) + '%';
             bars.push('<span style="height:' + h + '" data-idx="' + i + '"></span>');
         }
-        parts.push(
-            '<div class="voice-msg-bubble" data-msg-id="' + m.id + '">' +
-            '<button type="button" class="voice-play-btn" aria-label="پخش">▶</button>' +
-            '<div class="voice-waveform" id="' + waveId + '">' + bars.join('') + '</div>' +
-            '<span class="voice-duration">0:00</span>' +
-            '<audio preload="metadata" src="/api/file/' + m.id + '" data-msg-id="' + m.id + '"></audio>' +
-            '</div>'
-        );
+        if (e2eeMedia) {
+            parts.push(
+                '<div class="voice-msg-bubble" data-msg-id="' + m.id + '">' +
+                '<button type="button" class="voice-play-btn" aria-label="پخش">▶</button>' +
+                '<div class="voice-waveform" id="' + waveId + '">' + bars.join('') + '</div>' +
+                '<span class="voice-duration">0:00</span>' +
+                '<audio preload="metadata" class="msg-e2ee-media" data-msg-id="' + m.id + '" data-mime="audio/ogg"></audio>' +
+                '</div>'
+            );
+        } else {
+            parts.push(
+                '<div class="voice-msg-bubble" data-msg-id="' + m.id + '">' +
+                '<button type="button" class="voice-play-btn" aria-label="پخش">▶</button>' +
+                '<div class="voice-waveform" id="' + waveId + '">' + bars.join('') + '</div>' +
+                '<span class="voice-duration">0:00</span>' +
+                '<audio preload="metadata" src="/api/file/' + m.id + '" data-msg-id="' + m.id + '"></audio>' +
+                '</div>'
+            );
+        }
     }
     if (m.message_type === 'file' && m.id && m.file_name) {
-        parts.push('<a class="msg-file" href="/api/file/' + m.id + '" download="' + escapeHtml(m.file_name) + '">' + escapeHtml(m.file_name) + '</a>');
+        if (e2eeMedia) {
+            parts.push('<a class="msg-file msg-e2ee-media" href="#" data-msg-id="' + m.id + '" data-file-name="' + escapeHtml(m.file_name) + '" data-mime="' + escapeHtml(m.mime_type || '') + '">' + escapeHtml(m.file_name) + '</a>');
+        } else {
+            parts.push('<a class="msg-file" href="/api/file/' + m.id + '" download="' + escapeHtml(m.file_name) + '">' + escapeHtml(m.file_name) + '</a>');
+        }
     }
     if (m.body) {
         parts.push(escapeHtml(m.body));
@@ -2370,7 +2417,38 @@ function buildMessageHtml(m, otherReadUpTo) {
     }
     meta += '</div>';
     parts.push(meta);
-    return '<div class="msg ' + cls + '" data-msg-id="' + (m.id || '') + '">' + parts.join('') + '</div>';
+    return '<div class="msg ' + cls + '" data-msg-id="' + (m.id || '') + '" data-sender-id="' + (m.sender_id || '') + '" data-receiver-id="' + (m.receiver_id || '') + '">' + parts.join('') + '</div>';
+}
+function initE2eeMedia(messages, publicKeys) {
+    if (typeof nacl === 'undefined' || !nacl.secretbox) return;
+    var kp = getE2EEKeyPair();
+    if (!kp) return;
+    chatMessages.querySelectorAll('.msg-e2ee-media').forEach(function(el) {
+        var mid = parseInt(el.getAttribute('data-msg-id'), 10);
+        if (mid !== mid) return;
+        var msgEl = el.closest('.msg');
+        var senderId = parseInt(msgEl && msgEl.getAttribute('data-sender-id'), 10);
+        var receiverId = parseInt(msgEl && msgEl.getAttribute('data-receiver-id'), 10);
+        var iAmSender = senderId === userId;
+        var otherPub = iAmSender ? (receiverId ? otherPublicKeyByUserId[receiverId] : null) : (publicKeys && publicKeys[senderId] ? b64ToUint8(publicKeys[senderId]) : null);
+        if (!otherPub) return;
+        fetch('/api/file/' + mid).then(function(r) { return r.arrayBuffer(); }).then(function(buf) {
+            var enc = new Uint8Array(buf);
+            var dec = decryptFileE2ee(enc, otherPub, iAmSender);
+            if (!dec) return;
+            var blob = new Blob([dec]);
+            var url = URL.createObjectURL(blob);
+            if (el.tagName === 'IMG') {
+                el.src = url;
+            } else if (el.tagName === 'AUDIO') {
+                el.src = url;
+            } else if (el.tagName === 'A') {
+                el.href = url;
+                el.download = el.getAttribute('data-file-name') || 'file';
+                el.target = '_blank';
+            }
+        }).catch(function() {});
+    });
 }
 function formatDateSep(dateKey) {
     if (!dateKey) return '';
@@ -2430,6 +2508,7 @@ function loadChat(isPolling) {
             var otherReadUpTo = data.other_read_up_to != null ? data.other_read_up_to : null;
             var messages = prepareE2eeMessages(data.messages, data.public_keys || {});
             chatMessages.innerHTML = buildChatMessagesWithDateSep(messages, otherReadUpTo);
+            initE2eeMedia(messages, data.public_keys || {});
             initVoiceBubbles();
             chatMessages.querySelectorAll('.msg-del').forEach(function(btn) {
                 btn.addEventListener('click', function() {
@@ -2670,10 +2749,37 @@ chatForm.addEventListener('submit', async function(e) {
     if (selectedFile) {
         btn.disabled = true;
         var fd = new FormData();
-        fd.append('file', selectedFile);
-        fd.append('receiver_id', currentOtherId);
-        fd.append('body', body);
-        fd.append('csrf_token', csrfToken);
+        var otherPub = otherPublicKeyByUserId[currentOtherId];
+        var useE2ee = otherPub && typeof encryptFileE2ee === 'function';
+        if (useE2ee) {
+            try {
+                var ab = await selectedFile.arrayBuffer();
+                var enc = encryptFileE2ee(new Uint8Array(ab), otherPub);
+                if (!enc) { useE2ee = false; } else {
+                    var ext = (selectedFile.name || '').replace(/^.*\./, '').toLowerCase() || 'bin';
+                    var mime = selectedFile.type || 'application/octet-stream';
+                    var isVoice = (mime.indexOf('audio/') === 0);
+                    var msgType = isVoice ? 'voice' : (['jpg','jpeg','png','gif','webp'].indexOf(ext) >= 0 ? 'image' : 'file');
+                    fd.append('file', new Blob([enc]), 'media.bin');
+                    fd.append('e2ee_media', '1');
+                    fd.append('receiver_id', currentOtherId);
+                    fd.append('csrf_token', csrfToken);
+                    fd.append('message_type', msgType);
+                    fd.append('mime_type', mime);
+                    fd.append('file_name', selectedFile.name || 'file');
+                    if (body) {
+                        var capCipher = encryptE2eeBody(body, otherPub);
+                        if (capCipher) fd.append('caption_e2ee', capCipher);
+                    }
+                }
+            } catch (err) { useE2ee = false; }
+        }
+        if (!useE2ee) {
+            fd.append('file', selectedFile);
+            fd.append('receiver_id', currentOtherId);
+            fd.append('body', body);
+            fd.append('csrf_token', csrfToken);
+        }
         try {
             var r = await fetch('/api/send', { method: 'POST', body: fd });
             var res = await r.json();
