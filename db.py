@@ -396,6 +396,8 @@ def get_conversations(user_id: int, limit: int = 100, search: str = "") -> list[
                 preview = "📷 عکس"
             elif msg_type == "file":
                 preview = "📎 فایل"
+            elif msg_type == "voice":
+                preview = "🎤 ویس"
             else:
                 preview = (body.strip() or " ")[:50]
                 if len((body or "").strip()) > 50:

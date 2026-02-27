@@ -238,6 +238,41 @@
     transition: background var(--transition), transform 0.15s var(--ease);
 }
 .chat-form .btn-attach:hover { transform: scale(1.05); }
+.chat-form .btn-voice {
+    flex-shrink: 0;
+    padding: 0.75rem 1rem;
+    border-radius: 14px;
+    transition: background var(--transition), transform 0.15s var(--ease);
+}
+.chat-form .btn-voice:hover { transform: scale(1.05); }
+.chat-form .btn-voice.recording { background: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+.msg-voice {
+    max-width: 260px;
+    height: 40px;
+    border-radius: 12px;
+    display: block;
+    margin: 0.25rem 0;
+}
+.voice-preview, .voice-recording {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    margin: 0 1.25rem 0.5rem;
+    border-radius: 14px;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+}
+.voice-preview audio { max-width: 200px; height: 36px; }
+.voice-preview-actions { display: flex; gap: 0.5rem; }
+.voice-recording-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--danger);
+    animation: voicePulse 1s ease-in-out infinite;
+}
+@keyframes voicePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .chat-form .file-name {
     font-size: 0.8rem;
     color: var(--text-soft);
@@ -310,6 +345,19 @@
                 <div class="form-row">
                     <input type="text" id="msgInput" placeholder="پیام یا توضیح برای فایل..." autocomplete="off" maxlength="4096">
                     <button type="button" class="btn btn-secondary btn-attach" id="btnAttach" title="عکس یا فایل">📎</button>
+                    <button type="button" class="btn btn-secondary btn-voice" id="btnVoice" title="ضبط ویس">🎤</button>
+                </div>
+                <div class="voice-preview" id="voicePreview" style="display: none;">
+                    <audio id="voicePreviewAudio" controls preload="metadata"></audio>
+                    <span class="voice-preview-actions">
+                        <button type="button" class="btn btn-sm" id="btnSendVoice">ارسال ویس</button>
+                        <button type="button" class="btn btn-ghost btn-sm" id="btnCancelVoice">لغو</button>
+                    </span>
+                </div>
+                <div class="voice-recording" id="voiceRecording" style="display: none;">
+                    <span class="voice-recording-dot"></span>
+                    <span>در حال ضبط...</span>
+                    <button type="button" class="btn btn-sm btn-danger" id="btnStopVoice">توقف</button>
                 </div>
                 <input type="file" id="fileInput" accept="image/*,.pdf,.doc,.docx,.txt,.zip,.rar,.mp3,.mp4,.webm,.ogg,.wav,.m4a" style="display: none;">
                 <button type="submit" class="btn">ارسال</button>
@@ -340,6 +388,13 @@ const msgInput = document.getElementById('msgInput');
 const btnAttach = document.getElementById('btnAttach');
 const fileInput = document.getElementById('fileInput');
 const filePreview = document.getElementById('filePreview');
+const btnVoice = document.getElementById('btnVoice');
+const voicePreview = document.getElementById('voicePreview');
+const voicePreviewAudio = document.getElementById('voicePreviewAudio');
+const btnSendVoice = document.getElementById('btnSendVoice');
+const btnCancelVoice = document.getElementById('btnCancelVoice');
+const voiceRecording = document.getElementById('voiceRecording');
+const btnStopVoice = document.getElementById('btnStopVoice');
 const toastEl = document.getElementById('toast');
 const historyList = document.getElementById('historyList');
 const historyEmpty = document.getElementById('historyEmpty');
@@ -352,6 +407,11 @@ let currentOtherId = null;
 let currentOtherName = null;
 let selectedFile = null;
 let iBlockedThem = false;
+let isVoiceRecording = false;
+let voiceBlob = null;
+let voiceChunks = [];
+let mediaRecorderInstance = null;
+let voiceStream = null;
 var chatPollInterval = null;
 
 function stopChatPoll() {
@@ -395,6 +455,108 @@ fileInput.addEventListener('change', function() {
     selectedFile = this.files[0] || null;
     filePreview.textContent = selectedFile ? selectedFile.name : '';
 });
+
+function hideVoicePreview() {
+    if (voicePreviewAudio && voicePreviewAudio.src && voicePreviewAudio.src.indexOf('blob:') === 0) {
+        URL.revokeObjectURL(voicePreviewAudio.src);
+    }
+    voiceBlob = null;
+    if (voicePreview) voicePreview.style.display = 'none';
+    if (voicePreviewAudio) { voicePreviewAudio.src = ''; voicePreviewAudio.srcObject = null; }
+    if (btnVoice) btnVoice.classList.remove('recording');
+}
+function showVoicePreview(blob) {
+    voiceBlob = blob;
+    if (voiceRecording) voiceRecording.style.display = 'none';
+    isVoiceRecording = false;
+    if (btnVoice) btnVoice.classList.remove('recording');
+    if (voicePreviewAudio && blob) {
+        voicePreviewAudio.src = URL.createObjectURL(blob);
+        voicePreview.style.display = 'flex';
+    }
+}
+function startVoiceRecording() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('ضبط صدا در این مرورگر پشتیبانی نمیشه');
+        return;
+    }
+    if (!currentOtherId) {
+        showToast('اول یک چت باز کنید');
+        return;
+    }
+    if (iBlockedThem) {
+        showToast('این کاربر مسدود است');
+        return;
+    }
+    voiceChunks = [];
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+        voiceStream = stream;
+        var mime = 'audio/webm';
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
+        else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) mime = 'audio/ogg;codecs=opus';
+        mediaRecorderInstance = new MediaRecorder(stream);
+        mediaRecorderInstance.ondataavailable = function(e) { if (e.data && e.data.size > 0) voiceChunks.push(e.data); };
+        mediaRecorderInstance.onstop = function() {
+            voiceStream.getTracks().forEach(function(t) { t.stop(); });
+            voiceStream = null;
+            if (voiceChunks.length) {
+                var blob = new Blob(voiceChunks, { type: mime });
+                showVoicePreview(blob);
+            } else {
+                showToast('ضبط انجام نشد');
+            }
+        };
+        mediaRecorderInstance.start(200);
+        isVoiceRecording = true;
+        if (voiceRecording) voiceRecording.style.display = 'flex';
+        if (btnVoice) btnVoice.classList.add('recording');
+    }).catch(function() {
+        showToast('دسترسی به میکروفون داده نشد');
+    });
+}
+function stopVoiceRecording() {
+    if (!isVoiceRecording || !mediaRecorderInstance || mediaRecorderInstance.state === 'inactive') return;
+    mediaRecorderInstance.stop();
+    mediaRecorderInstance = null;
+}
+
+if (btnVoice) {
+    btnVoice.addEventListener('click', function() {
+        if (voiceBlob) { hideVoicePreview(); return; }
+        if (isVoiceRecording) { stopVoiceRecording(); return; }
+        startVoiceRecording();
+    });
+}
+if (btnStopVoice) {
+    btnStopVoice.addEventListener('click', stopVoiceRecording);
+}
+if (btnSendVoice) {
+    btnSendVoice.addEventListener('click', async function() {
+        if (!voiceBlob || !currentOtherId) return;
+        var fd = new FormData();
+        fd.append('file', voiceBlob, 'voice.webm');
+        fd.append('receiver_id', currentOtherId);
+        fd.append('message_type', 'voice');
+        fd.append('csrf_token', csrfToken);
+        btnSendVoice.disabled = true;
+        try {
+            var r = await fetch('/api/send', { method: 'POST', body: fd });
+            var res = await r.json();
+            if (res.ok) {
+                hideVoicePreview();
+                loadChat();
+                showToast('ویس ارسال شد');
+            } else {
+                showToast(res.error || 'خطا در ارسال ویس');
+            }
+        } finally {
+            btnSendVoice.disabled = false;
+        }
+    });
+}
+if (btnCancelVoice) {
+    btnCancelVoice.addEventListener('click', hideVoicePreview);
+}
 
 function loadConversations(q) {
     var url = '/api/conversations';
@@ -449,6 +611,8 @@ if (convoSearchBtn && convoSearch) {
 
 backBtn.addEventListener('click', function() {
     stopChatPoll();
+    if (isVoiceRecording) stopVoiceRecording();
+    hideVoicePreview();
     chatActive.classList.remove('visible');
     chatPlaceholder.style.display = 'flex';
     headerTitle.textContent = 'مسنجر — ' + username;
@@ -500,6 +664,9 @@ function buildMessageHtml(m, otherReadUpTo) {
     }
     if (m.message_type === 'image' && m.id) {
         parts.push('<img class="msg-img" src="/api/file/' + m.id + '" alt="عکس" loading="lazy">');
+    }
+    if (m.message_type === 'voice' && m.id) {
+        parts.push('<audio class="msg-voice" controls preload="metadata" src="/api/file/' + m.id + '"></audio>');
     }
     if (m.message_type === 'file' && m.id && m.file_name) {
         parts.push('<a class="msg-file" href="/api/file/' + m.id + '" download="' + escapeHtml(m.file_name) + '">' + escapeHtml(m.file_name) + '</a>');

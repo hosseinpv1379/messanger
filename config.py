@@ -36,6 +36,7 @@ SESSION_COOKIE_SECURE = os.environ.get("FLASK_ENV") == "production"
 UPLOAD_DIR = _BASE / "uploads"
 MAX_IMAGE_SIZE = 10 * 1024 * 1024   # ۱۰ مگ
 MAX_FILE_SIZE = 25 * 1024 * 1024    # ۲۵ مگ
+MAX_VOICE_SIZE = 5 * 1024 * 1024    # ۵ مگ برای ویس
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_FILE_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".zip", ".rar", ".mp3", ".mp4", ".webm", ".ogg", ".wav", ".m4a"}
 ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/gif", "image/webp"}

@@ -353,7 +353,14 @@ def api_send():
         ext = Path(fn).suffix.lower()
         content = f.read()
         size = len(content)
-        if ext in config.ALLOWED_IMAGE_EXTENSIONS:
+        is_voice = request.form.get("message_type") == "voice" or (
+            (getattr(f, "content_type") or "").startswith("audio/")
+        )
+        if is_voice:
+            if size > config.MAX_VOICE_SIZE:
+                return jsonify({"ok": False, "error": "حجم ویس حداکثر ۵ مگابایت"}), 400
+            message_type = "voice"
+        elif ext in config.ALLOWED_IMAGE_EXTENSIONS:
             if size > config.MAX_IMAGE_SIZE:
                 return jsonify({"ok": False, "error": "حجم عکس حداکثر ۱۰ مگابایت"}), 400
             message_type = "image"
