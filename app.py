@@ -554,6 +554,41 @@ def api_user_by_username(username):
     return jsonify(user)
 
 
+@app.route("/api/call/signal", methods=["POST"])
+@user_required
+def api_call_signal():
+    """ارسال سیگنال تماس (offer, answer, ice, hangup) به کاربر مقصد."""
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
+        return jsonify({"ok": False, "error": "CSRF نامعتبر"}), 403
+    uid = session["user_id"]
+    data = request.get_json() or {}
+    to_user_id = data.get("to_user_id")
+    signal_type = (data.get("type") or "").strip()
+    payload = data.get("payload")
+    if to_user_id is None or not signal_type:
+        return jsonify({"ok": False, "error": "to_user_id و type الزامی است"}), 400
+    to_user_id = int(to_user_id)
+    if to_user_id == uid:
+        return jsonify({"ok": False, "error": "مقصد نامعتبر"}), 400
+    if db.get_user_by_id(to_user_id) is None:
+        return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
+    if db.is_blocked(uid, to_user_id) or db.is_blocked(to_user_id, uid):
+        return jsonify({"ok": False, "error": "امکان تماس نیست"}), 403
+    if signal_type not in ("offer", "answer", "ice", "hangup"):
+        return jsonify({"ok": False, "error": "نوع سیگنال نامعتبر"}), 400
+    db.call_signal_add(uid, to_user_id, signal_type, payload if isinstance(payload, dict) else {})
+    return jsonify({"ok": True})
+
+
+@app.route("/api/call/signals")
+@user_required
+def api_call_signals():
+    """دریافت سیگنال‌های تماس دریافتی (یک‌بار مصرف)."""
+    uid = session["user_id"]
+    signals = db.call_signal_fetch_and_consume(uid)
+    return jsonify({"signals": signals})
+
+
 @app.route("/api/chat/<int:other_id>", methods=["GET", "POST"])
 @user_required
 def api_chat(other_id):

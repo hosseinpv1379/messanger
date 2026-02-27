@@ -552,6 +552,56 @@ html.theme-light .pwa-install-banner { box-shadow: 0 -4px 24px rgba(0,0,0,0.1); 
 .contact-profile-body .profile-bio { margin: 0; font-size: 0.9rem; color: var(--tg-text-secondary); line-height: 1.6; white-space: pre-wrap; text-align: center; }
 html.theme-light .contact-profile-modal { background: var(--tg-panel); box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
 
+/* تماس صوتی */
+.call-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 350;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s var(--ease), visibility 0.2s var(--ease);
+}
+.call-overlay.open { opacity: 1; visibility: visible; }
+.call-incoming-modal {
+    background: var(--tg-panel);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1.75rem;
+    text-align: center;
+    border: 1px solid var(--tg-border);
+    min-width: 260px;
+}
+.call-incoming-label { margin: 0 0 0.25rem; font-size: 13px; color: var(--tg-text-secondary); }
+.call-incoming-name { margin: 0 0 1.25rem; font-size: 1.2rem; font-weight: 600; color: var(--tg-text); }
+.call-incoming-actions { display: flex; justify-content: center; gap: 1rem; }
+.call-btn-reject { background: #e53935; color: #fff; width: 56px; height: 56px; border-radius: 50%; padding: 0; font-size: 1.3rem; }
+.call-btn-reject:hover { background: #c62828; }
+.call-btn-accept { background: #43a047; color: #fff; width: 56px; height: 56px; border-radius: 50%; padding: 0; font-size: 1.3rem; }
+.call-btn-accept:hover { background: #388e3c; }
+.call-in-progress {
+    position: fixed;
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 340;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem 0.6rem 1.25rem;
+    background: var(--tg-panel);
+    border: 1px solid var(--tg-border);
+    border-radius: var(--radius-full);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+.call-in-progress-text { font-size: 14px; font-weight: 500; color: var(--tg-text); }
+.call-btn-hangup { background: #e53935; color: #fff; width: 40px; height: 40px; border-radius: 50%; padding: 0; font-size: 1.1rem; }
+.call-btn-hangup:hover { background: #c62828; }
+#remoteAudio { display: none; }
+
 .settings-about {
     font-size: 0.9rem;
     color: var(--text-soft);
@@ -1318,6 +1368,7 @@ html.theme-light .chat-messages {
             <span class="tg-chat-header-title" id="chatHeaderTitle">مسنجر</span>
             <div class="tg-chat-header-actions" id="headerActions">
                 <div class="chat-with-actions chat-actions-1-1" id="chatHeaderActions1" style="display: none;">
+                    <button type="button" class="tg-icon-btn" id="chatCallBtn" title="تماس صوتی">📞</button>
                     <button type="button" class="tg-icon-btn" id="chatViewProfileBtn" title="پروفایل">👤</button>
                     <button type="button" class="tg-icon-btn" id="chatSearchToggle" title="جستجو در چت">🔍</button>
                     <button type="button" class="tg-icon-btn" id="chatClearChatBtn" title="حذف گفتگو">🗑</button>
@@ -1565,6 +1616,22 @@ html.theme-light .chat-messages {
         </div>
     </div>
 </div>
+<!-- تماس صوتی: ورودی و در حال تماس -->
+<div class="call-overlay" id="callIncomingOverlay" aria-hidden="true">
+    <div class="call-incoming-modal">
+        <p class="call-incoming-label" id="callIncomingLabel">تماس از …</p>
+        <p class="call-incoming-name" id="callIncomingName">—</p>
+        <div class="call-incoming-actions">
+            <button type="button" class="btn call-btn-reject" id="callRejectBtn" title="رد تماس">✕</button>
+            <button type="button" class="btn call-btn-accept" id="callAcceptBtn" title="پذیرش">📞</button>
+        </div>
+    </div>
+</div>
+<div class="call-in-progress" id="callInProgress" style="display: none;">
+    <span class="call-in-progress-text" id="callInProgressText">در تماس با …</span>
+    <button type="button" class="btn call-btn-hangup" id="callHangupBtn" title="قطع تماس">📵</button>
+</div>
+<audio id="remoteAudio" autoplay playsinline></audio>
 <div class="toast" id="toast" role="alert"></div>
 {% endblock %}
 {% block extra_js %}
@@ -3126,6 +3193,161 @@ if (contactProfileOverlay) contactProfileOverlay.addEventListener('click', funct
         contactProfileOverlay.setAttribute('aria-hidden', 'true');
     }
 });
+var chatCallBtn = document.getElementById('chatCallBtn');
+var callIncomingOverlay = document.getElementById('callIncomingOverlay');
+var callIncomingName = document.getElementById('callIncomingName');
+var callRejectBtn = document.getElementById('callRejectBtn');
+var callAcceptBtn = document.getElementById('callAcceptBtn');
+var callInProgress = document.getElementById('callInProgress');
+var callInProgressText = document.getElementById('callInProgressText');
+var callHangupBtn = document.getElementById('callHangupBtn');
+var remoteAudio = document.getElementById('remoteAudio');
+var callPeerConnection = null;
+var callLocalStream = null;
+var callSignalsInterval = null;
+var callOtherId = null;
+var callOtherName = null;
+var callIncomingFromId = null;
+var callIncomingFromName = null;
+var callPendingOffer = null;
+var callIsCaller = false;
+
+function sendCallSignal(toUserId, type, payload) {
+    return fetch('/api/call/signal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ to_user_id: toUserId, type: type, payload: payload || {} })
+    }).then(function(r) { return r.json(); });
+}
+function pollCallSignals() {
+    fetch('/api/call/signals').then(function(r) { return r.json(); }).then(function(data) {
+        var signals = (data && data.signals) || [];
+        signals.forEach(function(sig) {
+            if (sig.type === 'offer') {
+                if (callPeerConnection || callPendingOffer) return;
+                callPendingOffer = sig.payload;
+                callIncomingFromId = sig.from_user_id;
+                callIncomingFromName = (callPendingOffer.username || '') || 'کاربر';
+                if (callIncomingName) callIncomingName.textContent = callIncomingFromName;
+                if (callIncomingOverlay) { callIncomingOverlay.classList.add('open'); callIncomingOverlay.setAttribute('aria-hidden', 'false'); }
+            } else if (sig.type === 'answer' && callPeerConnection && callIsCaller) {
+                callPeerConnection.setRemoteDescription(new RTCSessionDescription(sig.payload)).catch(function() {});
+            } else if (sig.type === 'ice' && callPeerConnection) {
+                if (sig.payload.candidate)
+                    callPeerConnection.addIceCandidate(new RTCIceCandidate(sig.payload)).catch(function() {});
+            } else if (sig.type === 'hangup') {
+                endCall();
+            }
+        });
+    });
+}
+function endCall() {
+    if (callSignalsInterval) { clearInterval(callSignalsInterval); callSignalsInterval = null; }
+    if (callPeerConnection) { callPeerConnection.close(); callPeerConnection = null; }
+    if (callLocalStream) { callLocalStream.getTracks().forEach(function(t) { t.stop(); }); callLocalStream = null; }
+    if (callOtherId) { sendCallSignal(callOtherId, 'hangup', {}); callOtherId = null; }
+    callOtherName = null;
+    callPendingOffer = null;
+    callIncomingFromId = null;
+    callIncomingFromName = null;
+    callIsCaller = false;
+    if (callInProgress) callInProgress.style.display = 'none';
+    if (callIncomingOverlay) { callIncomingOverlay.classList.remove('open'); callIncomingOverlay.setAttribute('aria-hidden', 'true'); }
+    if (remoteAudio) remoteAudio.srcObject = null;
+}
+function startOutgoingCall() {
+    if (!currentOtherId || callPeerConnection) return;
+    callOtherId = currentOtherId;
+    callOtherName = currentOtherName || '';
+    callIsCaller = true;
+    var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    callPeerConnection = pc;
+    pc.onicecandidate = function(e) {
+        if (e.candidate && callOtherId) sendCallSignal(callOtherId, 'ice', e.candidate);
+    };
+    pc.ontrack = function(e) {
+        if (remoteAudio) remoteAudio.srcObject = e.streams[0];
+    };
+    pc.onconnectionstatechange = function() {
+        if (pc.connectionState === 'connected') {
+            if (callInProgressText) callInProgressText.textContent = 'در تماس با ' + (callOtherName || '');
+            if (callInProgress) callInProgress.style.display = 'flex';
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+            endCall();
+        }
+    };
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(function(stream) {
+        callLocalStream = stream;
+        stream.getTracks().forEach(function(t) { pc.addTrack(t, stream); });
+        return pc.createOffer();
+    }).then(function(offer) {
+        return pc.setLocalDescription(offer);
+    }).then(function() {
+        return sendCallSignal(callOtherId, 'offer', { sdp: pc.localDescription, username: (typeof username !== 'undefined' ? username : '') });
+    }).then(function(res) {
+        if (!res.ok) { endCall(); showToast(res.error || 'خطا'); return; }
+        callSignalsInterval = setInterval(pollCallSignals, 1500);
+        pollCallSignals();
+    }).catch(function(err) {
+        endCall();
+        showToast('خطا در برقراری تماس');
+    });
+}
+function acceptIncomingCall() {
+    if (!callPendingOffer || !callIncomingFromId) return;
+    var offerSdp = callPendingOffer.sdp || callPendingOffer;
+    if (!offerSdp || !offerSdp.sdp) { endCall(); return; }
+    callOtherId = callIncomingFromId;
+    callOtherName = callIncomingFromName;
+    callIsCaller = false;
+    if (callIncomingOverlay) { callIncomingOverlay.classList.remove('open'); callIncomingOverlay.setAttribute('aria-hidden', 'true'); }
+    var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    callPeerConnection = pc;
+    pc.onicecandidate = function(e) {
+        if (e.candidate && callOtherId) sendCallSignal(callOtherId, 'ice', e.candidate);
+    };
+    pc.ontrack = function(e) {
+        if (remoteAudio) remoteAudio.srcObject = e.streams[0];
+    };
+    pc.onconnectionstatechange = function() {
+        if (pc.connectionState === 'connected') {
+            if (callInProgressText) callInProgressText.textContent = 'در تماس با ' + (callOtherName || '');
+            if (callInProgress) callInProgress.style.display = 'flex';
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+            endCall();
+        }
+    };
+    pc.setRemoteDescription(new RTCSessionDescription(offerSdp)).then(function() {
+        return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    }).then(function(stream) {
+        callLocalStream = stream;
+        stream.getTracks().forEach(function(t) { pc.addTrack(t, stream); });
+        return pc.createAnswer();
+    }).then(function(answer) {
+        return pc.setLocalDescription(answer);
+    }).then(function() {
+        return sendCallSignal(callOtherId, 'answer', pc.localDescription);
+    }).then(function(res) {
+        if (!res.ok) { endCall(); return; }
+        callSignalsInterval = setInterval(pollCallSignals, 1500);
+        pollCallSignals();
+        callPendingOffer = null;
+    }).catch(function() {
+        endCall();
+        showToast('خطا در پذیرش تماس');
+    });
+}
+if (chatCallBtn) chatCallBtn.addEventListener('click', startOutgoingCall);
+if (callRejectBtn) callRejectBtn.addEventListener('click', function() {
+    if (callIncomingFromId) sendCallSignal(callIncomingFromId, 'hangup', {});
+    callPendingOffer = null;
+    callIncomingFromId = null;
+    if (callIncomingOverlay) { callIncomingOverlay.classList.remove('open'); callIncomingOverlay.setAttribute('aria-hidden', 'true'); }
+});
+if (callAcceptBtn) callAcceptBtn.addEventListener('click', acceptIncomingCall);
+if (callHangupBtn) callHangupBtn.addEventListener('click', endCall);
+setInterval(pollCallSignals, 2500);
+
 if (chatViewProfileBtn) {
     chatViewProfileBtn.addEventListener('click', function() {
         if (!currentOtherId) return;

@@ -120,6 +120,18 @@ def _migrate_extra(c):
         )
     """)
     c.execute("""
+        CREATE TABLE IF NOT EXISTS call_signals (
+            id INTEGER PRIMARY KEY,
+            from_user_id INTEGER NOT NULL,
+            to_user_id INTEGER NOT NULL,
+            signal_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (from_user_id) REFERENCES users(id),
+            FOREIGN KEY (to_user_id) REFERENCES users(id)
+        )
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS group_messages (
             id INTEGER PRIMARY KEY,
             group_id INTEGER NOT NULL,
@@ -442,6 +454,34 @@ def is_blocked(blocker_id: int, blocked_id: int) -> bool:
             (blocker_id, blocked_id),
         ).fetchone()
         return r is not None
+
+
+def call_signal_add(from_user_id: int, to_user_id: int, signal_type: str, payload: dict) -> bool:
+    """ذخیرهٔ یک سیگنال تماس (offer, answer, ice, hangup) برای کاربر مقصد."""
+    import json
+    with get_conn() as c:
+        c.execute(
+            "INSERT INTO call_signals (from_user_id, to_user_id, signal_type, payload_json) VALUES (?, ?, ?, ?)",
+            (from_user_id, to_user_id, signal_type, json.dumps(payload)),
+        )
+    return True
+
+
+def call_signal_fetch_and_consume(to_user_id: int) -> list[dict]:
+    """برگرداندن همهٔ سیگنال‌های دریافتی برای کاربر و حذف آن‌ها از جدول."""
+    import json
+    with get_conn() as c:
+        rows = c.execute(
+            "SELECT id, from_user_id, signal_type, payload_json FROM call_signals WHERE to_user_id = ? ORDER BY id",
+            (to_user_id,),
+        ).fetchall()
+        ids = [r[0] for r in rows]
+        if ids:
+            c.execute("DELETE FROM call_signals WHERE id IN (" + ",".join("?" * len(ids)) + ")", ids)
+    return [
+        {"from_user_id": r[1], "type": r[2], "payload": json.loads(r[3]) if r[3] else {}}
+        for r in rows
+    ]
 
 
 def message_send(sender_id: int, receiver_id: int, body: str, body_e2ee_blob: bytes | None = None, reply_to_id: int | None = None) -> bool:
