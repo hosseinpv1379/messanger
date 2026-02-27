@@ -769,11 +769,11 @@ def group_create(creator_id: int, name: str) -> tuple[dict | None, str]:
     code = secrets.token_urlsafe(8)
     with get_conn() as c:
         try:
-            c.execute(
+            cur = c.execute(
                 "INSERT INTO groups (name, invite_code, created_by_id) VALUES (?, ?, ?)",
                 (name, code, creator_id),
             )
-            gid = c.lastrowid
+            gid = cur.lastrowid
             c.execute(
                 "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
                 (gid, creator_id),
