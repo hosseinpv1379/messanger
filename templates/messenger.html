@@ -7,9 +7,15 @@ html.theme-light .messenger-page {
     --tg-accent: #229ED9;
     --tg-accent-dim: rgba(34, 158, 217, 0.18);
 }
-html.theme-light .chat-placeholder .history-item { background: rgba(255,255,255,0.7); }
+html.theme-light .chat-placeholder .history-item {
+    background: rgba(255,255,255,0.85);
+    border-color: rgba(0,0,0,0.06);
+}
 html.theme-light .chat-placeholder .history-item:hover,
-html.theme-light .chat-placeholder .history-item.active { background: var(--tg-accent-dim); }
+html.theme-light .chat-placeholder .history-item.active {
+    background: var(--tg-accent-dim);
+    border-color: rgba(34, 158, 217, 0.25);
+}
 html.theme-light .chat-messages .msg.received { background: #fff; border-color: rgba(0,0,0,0.08); color: #0f172a; }
 html.theme-light .drawer-overlay .drawer { background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); border-color: rgba(148, 163, 184, 0.4); }
 html.theme-light .pwa-install-banner { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-color: rgba(148, 163, 184, 0.5); }
@@ -217,6 +223,78 @@ html.theme-light .pwa-install-banner { background: linear-gradient(135deg, #f1f5
 html.theme-light .theme-opt { border-color: rgba(100, 116, 139, 0.5); }
 html.theme-light .theme-opt:hover { background: rgba(0,0,0,0.06); }
 html.theme-light .theme-opt.active { background: var(--tg-accent); color: #fff; border-color: var(--tg-accent); }
+
+/* ——— تم روشن: کل صفحه مسنجر ——— */
+html.theme-light .messenger-page {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(148, 163, 184, 0.5);
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15);
+}
+html.theme-light .messenger-page:focus-within {
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.18), 0 0 0 1px var(--accent-dim);
+}
+html.theme-light .msg-header {
+    background: linear-gradient(135deg, rgba(34, 158, 217, 0.12) 0%, rgba(248, 250, 252, 0.98) 100%);
+    border-bottom-color: rgba(148, 163, 184, 0.4);
+}
+html.theme-light .drawer-overlay { background: rgba(0,0,0,0.35); }
+html.theme-light .drawer {
+    box-shadow: -8px 0 32px rgba(0,0,0,0.15);
+}
+html.theme-light .drawer-header { border-bottom-color: rgba(148, 163, 184, 0.35); }
+html.theme-light .drawer-item:hover { background: var(--tg-accent-dim); }
+html.theme-light .drawer-new-chat { border-bottom-color: rgba(148, 163, 184, 0.35); }
+html.theme-light .settings-item {
+    background: rgba(226, 232, 240, 0.9);
+    border-color: rgba(148, 163, 184, 0.25);
+}
+html.theme-light .settings-item:hover { background: rgba(203, 213, 225, 0.95); }
+html.theme-light .chat-search-in-chat { background: rgba(241, 245, 249, 0.95); }
+html.theme-light .chat-with-actions .btn-icon-small:hover { background: rgba(0,0,0,0.08); }
+html.theme-light .chat-with {
+    background: rgba(248, 250, 252, 0.98);
+    border-bottom-color: rgba(148, 163, 184, 0.4);
+}
+html.theme-light .chat-messages {
+    background: repeating-linear-gradient(
+        180deg,
+        transparent,
+        transparent 40px,
+        rgba(0,0,0,0.02) 40px,
+        rgba(0,0,0,0.02) 41px
+    );
+}
+html.theme-light .chat-form {
+    background: rgba(248, 250, 252, 0.98);
+    border-top-color: rgba(148, 163, 184, 0.4);
+}
+html.theme-light .msg .msg-del:hover { background: rgba(0,0,0,0.1); }
+html.theme-light .mic-permission-card {
+    background: linear-gradient(145deg, rgba(34, 158, 217, 0.1) 0%, rgba(255, 255, 255, 0.95) 100%);
+    border-color: rgba(34, 158, 217, 0.3);
+}
+html.theme-light .mic-permission-card.insecure {
+    background: linear-gradient(145deg, rgba(251, 191, 36, 0.12) 0%, rgba(255, 255, 255, 0.95) 100%);
+    border-color: rgba(251, 191, 36, 0.35);
+}
+html.theme-light .mic-permission-icon { background: rgba(34, 158, 217, 0.18); }
+html.theme-light .mic-permission-card.insecure .mic-permission-icon { background: rgba(251, 191, 36, 0.2); }
+html.theme-light .voice-recording {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.99) 100%);
+    border-color: rgba(220, 38, 38, 0.3);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+html.theme-light .voice-preview {
+    background: linear-gradient(135deg, rgba(226, 232, 240, 0.9) 0%, rgba(241, 245, 249, 0.95) 100%);
+    border-color: rgba(148, 163, 184, 0.45);
+}
+html.theme-light .voice-preview-progress-wrap { background: rgba(148, 163, 184, 0.35); }
+html.theme-light .msg.received .voice-msg-bubble .voice-play-btn { background: rgba(0,0,0,0.1); }
+html.theme-light .msg.received .voice-msg-bubble .voice-play-btn:hover { background: rgba(0,0,0,0.18); }
+html.theme-light .pwa-install-banner {
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
+}
+
 .settings-about {
     font-size: 0.9rem;
     color: var(--text-soft);
