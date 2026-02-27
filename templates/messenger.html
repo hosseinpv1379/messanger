@@ -1775,19 +1775,29 @@ function uploadWithProgress(url, formData) {
         var xhr = new XMLHttpRequest();
         xhr.open('POST', url);
         xhr.setRequestHeader('X-CSRF-Token', csrfToken);
-        xhr.responseType = 'json';
         xhr.upload.addEventListener('progress', function(e) {
             if (e.lengthComputable) showUploadProgress((e.loaded / e.total) * 100);
             else showUploadProgress(50);
         });
         xhr.addEventListener('load', function() {
             hideUploadProgress();
-            var res = { ok: xhr.status >= 200 && xhr.status < 300 };
-            try {
-                if (xhr.response && typeof xhr.response === 'object') res = xhr.response;
-                else res = JSON.parse(xhr.responseText || '{}');
-            } catch (err) { res.error = res.error || 'پاسخ نامعتبر'; }
-            if (!res.hasOwnProperty('ok')) res.ok = xhr.status >= 200 && xhr.status < 300;
+            var ok = xhr.status >= 200 && xhr.status < 300;
+            var res = { ok: ok };
+            var text = (xhr.responseText || '').trim();
+            if (text) {
+                try {
+                    var parsed = JSON.parse(text);
+                    if (parsed && typeof parsed === 'object') {
+                        res = parsed;
+                        if (!parsed.hasOwnProperty('ok')) res.ok = ok;
+                    }
+                } catch (err) {
+                    res.ok = false;
+                    res.error = res.error || 'پاسخ سرور قابل خواندن نبود (شاید خطای سرور)';
+                }
+            } else if (!ok) {
+                res.error = res.error || ('خطا ' + xhr.status);
+            }
             resolve(res);
         });
         xhr.addEventListener('error', function() { hideUploadProgress(); reject(new Error('خطای شبکه')); });
