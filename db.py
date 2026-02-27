@@ -122,6 +122,31 @@ def user_verify(username: str, password: str) -> int | None:
         return row[0] if verify_password(password, row[1]) else None
 
 
+def _user_get_hash(user_id: int) -> str | None:
+    with get_conn() as c:
+        row = c.execute(
+            "SELECT password_hash FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        return row[0] if row else None
+
+
+def user_update_password(user_id: int, current_password: str, new_password: str) -> tuple[bool, str]:
+    """تغییر رمز کاربر. موفق: (True, '')، ناموفق: (False, پیام خطا)."""
+    import config
+    stored = _user_get_hash(user_id)
+    if not stored or not verify_password(current_password, stored):
+        return False, "رمز فعلی اشتباه است."
+    new_password = (new_password or "")[: config.MAX_PASSWORD_LEN]
+    if len(new_password) < config.MIN_PASSWORD_LEN:
+        return False, f"رمز جدید حداقل {config.MIN_PASSWORD_LEN} کاراکتر باشد."
+    with get_conn() as c:
+        c.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (hash_password(new_password), user_id),
+        )
+    return True, ""
+
+
 def user_add(username: str, password: str) -> tuple[bool, str]:
     """فقط ادمین. True و پیام خالی یعنی موفق."""
     import config

@@ -36,6 +36,8 @@
 }
 .msg-header .back-btn.visible { display: inline-flex; }
 .msg-header .title { flex: 1; font-weight: 600; font-size: 1rem; }
+.msg-header .header-link { font-size: 0.85rem; padding: 0.4rem 0.75rem; text-decoration: none; }
+.msg-header .header-link:hover { text-decoration: none; }
 .open-chat-bar {
     padding: 1rem;
     padding-left: max(1rem, var(--safe-top));
@@ -185,6 +187,7 @@
     <header class="msg-header">
         <button type="button" class="btn btn-ghost back-btn" id="backBtn" aria-label="بازگشت">←</button>
         <span class="title" id="headerTitle">مسنجر — {{ username }}</span>
+        <a href="{{ url_for('user_change_password') }}" class="btn btn-ghost header-link" title="تغییر رمز عبور">تغییر رمز</a>
     </header>
     <div class="open-chat-bar">
         <label for="otherUsername">نام کاربری:</label>

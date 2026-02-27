@@ -170,6 +170,41 @@ def messenger():
     )
 
 
+@app.route("/user/change-password", methods=["GET", "POST"])
+@user_required
+def user_change_password():
+    """تغییر رمز عبور کاربر (غیرمتمرکز — هر کاربر رمز خودش را عوض می‌کند)."""
+    if request.method == "GET":
+        return render_template(
+            "user_change_password.html",
+            csrf_token=security.csrf_token(session),
+        )
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return redirect(url_for("user_change_password"))
+    uid = session["user_id"]
+    current = (request.form.get("current_password") or "")[: config.MAX_PASSWORD_LEN]
+    new_pw = (request.form.get("new_password") or "")[: config.MAX_PASSWORD_LEN]
+    confirm = (request.form.get("confirm_password") or "")[: config.MAX_PASSWORD_LEN]
+    if new_pw != confirm:
+        return render_template(
+            "user_change_password.html",
+            csrf_token=security.csrf_token(session),
+            error="رمز جدید و تکرار آن یکسان نیستند.",
+        )
+    ok, msg = db.user_update_password(uid, current, new_pw)
+    if ok:
+        return render_template(
+            "user_change_password.html",
+            csrf_token=security.csrf_token(session),
+            success=True,
+        )
+    return render_template(
+        "user_change_password.html",
+        csrf_token=security.csrf_token(session),
+        error=msg,
+    )
+
+
 @app.route("/api/conversations")
 @user_required
 def api_conversations():
