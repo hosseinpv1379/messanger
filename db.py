@@ -43,6 +43,7 @@ def init_db():
             );
         """)
         _migrate_messages_media(c)
+        _migrate_extra(c)
         cur = c.execute("SELECT 1 FROM admin LIMIT 1")
         if cur.fetchone() is None:
             # پیش‌فرض: admin / admin123
@@ -59,9 +60,38 @@ def _migrate_messages_media(c):
         ("file_path", "TEXT"),
         ("file_name", "TEXT"),
         ("mime_type", "TEXT"),
+        ("deleted_at", "TIMESTAMP"),
     ]:
         if col not in cols:
             c.execute(f"ALTER TABLE messages ADD COLUMN {col} {defn}")
+
+
+def _migrate_extra(c):
+    """جدول‌ها و ستون‌های اضافی: بلوک، خوانده‌شده، بن کاربر."""
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS blocked (
+            blocker_id INTEGER NOT NULL,
+            blocked_id INTEGER NOT NULL,
+            PRIMARY KEY (blocker_id, blocked_id),
+            FOREIGN KEY (blocker_id) REFERENCES users(id),
+            FOREIGN KEY (blocked_id) REFERENCES users(id)
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS read_receipts (
+            user_id INTEGER NOT NULL,
+            other_id INTEGER NOT NULL,
+            last_read_message_id INTEGER NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, other_id),
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (other_id) REFERENCES users(id)
+        )
+    """)
+    cur = c.execute("PRAGMA table_info(users)")
+    cols = [row[1] for row in cur.fetchall()]
+    if "is_banned" not in cols:
+        c.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0")
 
 
 def hash_password(password: str) -> str:
@@ -112,12 +142,24 @@ def admin_update_password(username: str, current_password: str, new_password: st
 
 
 def user_verify(username: str, password: str) -> int | None:
-    """برگرداندن user id در صورت موفقیت."""
+    """برگرداندن user id در صورت موفقیت. کاربر مسدود نتواند وارد شود."""
     with get_conn() as c:
-        row = c.execute(
-            "SELECT id, password_hash FROM users WHERE username = ?", (username,)
-        ).fetchone()
+        cur = c.execute("PRAGMA table_info(users)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "is_banned" in cols:
+            row = c.execute(
+                "SELECT id, password_hash, is_banned FROM users WHERE username = ?",
+                (username,),
+            ).fetchone()
+        else:
+            row = c.execute(
+                "SELECT id, password_hash FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if row:
+                row = (row[0], row[1], 0)
         if row is None:
+            return None
+        if len(row) > 2 and row[2]:
             return None
         return row[0] if verify_password(password, row[1]) else None
 
@@ -172,18 +214,49 @@ def user_add(username: str, password: str) -> tuple[bool, str]:
             return False, "این نام کاربری قبلاً ثبت شده است."
 
 
-def user_list():
+def user_list(search: str = ""):
+    """لیست کاربران. search: فیلتر نام کاربری (خالی = همه)."""
     with get_conn() as c:
-        return [
-            {"id": r[0], "username": r[1], "created_at": r[2]}
-            for r in c.execute(
-                "SELECT id, username, created_at FROM users ORDER BY username"
-            )
-        ]
+        cur = c.execute("PRAGMA table_info(users)")
+        cols = [r[1] for r in cur.fetchall()]
+        has_banned = "is_banned" in cols
+        if has_banned:
+            sel = "SELECT id, username, created_at, is_banned FROM users"
+        else:
+            sel = "SELECT id, username, created_at FROM users"
+        if search:
+            q = (search or "").strip()
+            q = f"%{q}%"
+            sel += " WHERE username LIKE ?"
+            params = (q,)
+        else:
+            params = ()
+        sel += " ORDER BY username"
+        rows = c.execute(sel, params).fetchall()
+        out = []
+        for r in rows:
+            u = {"id": r[0], "username": r[1], "created_at": r[2]}
+            if has_banned and len(r) > 3:
+                u["is_banned"] = bool(r[3])
+            else:
+                u["is_banned"] = False
+            out.append(u)
+        return out
+
+
+def is_blocked(blocker_id: int, blocked_id: int) -> bool:
+    with get_conn() as c:
+        r = c.execute(
+            "SELECT 1 FROM blocked WHERE blocker_id = ? AND blocked_id = ?",
+            (blocker_id, blocked_id),
+        ).fetchone()
+        return r is not None
 
 
 def message_send(sender_id: int, receiver_id: int, body: str) -> bool:
     import config
+    if is_blocked(receiver_id, sender_id):
+        return False
     if not body or len(body) > config.MAX_MESSAGE_LEN:
         return False
     enc = encrypt_message(body)
@@ -198,14 +271,18 @@ def message_send(sender_id: int, receiver_id: int, body: str) -> bool:
 
 
 def messages_for_user(user_id: int, other_id: int | None = None):
-    """لیست مکالمات یا پیام‌های با یک کاربر خاص. هر پیام با body، message_type، file_path و غیره."""
+    """لیست مکالمات یا پیام‌های با یک کاربر خاص. پیام‌های حذف‌شده نشان داده نمی‌شوند."""
     with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(messages)")
+        cols = [r[1] for r in cur.fetchall()]
+        deleted_clause = " AND (deleted_at IS NULL)" if "deleted_at" in cols else ""
         if other_id is not None:
             rows = c.execute(
                 """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
                           message_type, file_path, file_name, mime_type
                    FROM messages
-                   WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+                   WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+                   """ + deleted_clause + """
                    ORDER BY created_at""",
                 (user_id, other_id, other_id, user_id),
             ).fetchall()
@@ -214,7 +291,8 @@ def messages_for_user(user_id: int, other_id: int | None = None):
                 """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
                           message_type, file_path, file_name, mime_type
                    FROM messages
-                   WHERE sender_id = ? OR receiver_id = ?
+                   WHERE (sender_id = ? OR receiver_id = ?)
+                   """ + deleted_clause + """
                    ORDER BY created_at DESC""",
                 (user_id, user_id),
             ).fetchall()
@@ -241,8 +319,17 @@ def messages_for_user(user_id: int, other_id: int | None = None):
 
 def get_user_by_id(uid: int) -> dict | None:
     with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(users)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "is_banned" in cols:
+            row = c.execute("SELECT id, username, is_banned FROM users WHERE id = ?", (uid,)).fetchone()
+            if not row:
+                return None
+            return {"id": row[0], "username": row[1], "is_banned": bool(row[2])}
         row = c.execute("SELECT id, username FROM users WHERE id = ?", (uid,)).fetchone()
-        return {"id": row[0], "username": row[1]} if row else None
+        if not row:
+            return None
+        return {"id": row[0], "username": row[1], "is_banned": False}
 
 
 def get_user_by_username(username: str) -> dict | None:
@@ -251,16 +338,16 @@ def get_user_by_username(username: str) -> dict | None:
     if not username:
         return None
     with get_conn() as c:
-        row = c.execute("SELECT id, username FROM users WHERE username = ?", (username,)).fetchone()
-        return {"id": row[0], "username": row[1]} if row else None
+        u = c.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    if not u:
+        return None
+    return get_user_by_id(u[0])
 
 
-def get_conversations(user_id: int, limit: int = 100) -> list[dict]:
-    """لیست گفتگوهای اخیر کاربر: هر آیتم other_id، other_username، آخرین پیام و زمان."""
+def get_conversations(user_id: int, limit: int = 100, search: str = "") -> list[dict]:
+    """لیست گفتگوهای اخیر. کاربران بلاک‌شده حذف می‌شوند. search: فیلتر نام کاربری."""
     with get_conn() as c:
-        cur = c.execute(
-            "PRAGMA table_info(messages)"
-        )
+        cur = c.execute("PRAGMA table_info(messages)")
         cols = [row[1] for row in cur.fetchall()]
         has_type = "message_type" in cols
         if has_type:
@@ -269,7 +356,7 @@ def get_conversations(user_id: int, limit: int = 100) -> list[dict]:
                      CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END AS other_id,
                      created_at, body_encrypted, message_type
                    FROM messages
-                   WHERE sender_id = ? OR receiver_id = ?
+                   WHERE (sender_id = ? OR receiver_id = ?)
                    ORDER BY created_at DESC
                    LIMIT ?""",
                 (user_id, user_id, user_id, limit * 2),
@@ -287,11 +374,19 @@ def get_conversations(user_id: int, limit: int = 100) -> list[dict]:
             ).fetchall()
     seen: set[int] = set()
     out: list[dict] = []
+    search_lower = (search or "").strip().lower()
     for r in rows:
         other_id = r[0]
         if other_id in seen:
             continue
+        if is_blocked(user_id, other_id):
+            continue
         seen.add(other_id)
+        u = get_user_by_id(other_id)
+        if not u:
+            continue
+        if search_lower and search_lower not in (u.get("username") or "").lower():
+            continue
         body = decrypt_message(r[2]) if r[2] else ""
         if body is None:
             preview = "[پیام]"
@@ -307,15 +402,12 @@ def get_conversations(user_id: int, limit: int = 100) -> list[dict]:
                     preview += "…"
         out.append({
             "other_id": other_id,
+            "other_username": u["username"],
             "last_at": r[1],
             "last_preview": preview,
         })
         if len(out) >= limit:
             break
-    # نام کاربری برای هر other_id
-    for item in out:
-        u = get_user_by_id(item["other_id"])
-        item["other_username"] = u["username"] if u else ""
     return out
 
 
@@ -328,6 +420,8 @@ def message_send_media(
     file_name: str,
     mime_type: str,
 ) -> bool:
+    if is_blocked(receiver_id, sender_id):
+        return False
     import config
     caption = (caption or "").strip()[: config.MAX_MESSAGE_LEN]
     enc = encrypt_message(caption or " ")
@@ -362,3 +456,117 @@ def get_message_by_id(msg_id: int) -> dict | None:
             "file_name": row[5] or "",
             "mime_type": row[6] or "",
         }
+
+
+def message_delete(message_id: int, user_id: int) -> bool:
+    """حذف پیام (فقط فرستنده). حذف نرم با deleted_at."""
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(messages)")
+        if "deleted_at" not in [r[1] for r in cur.fetchall()]:
+            return False
+        r = c.execute(
+            "SELECT sender_id FROM messages WHERE id = ?",
+            (message_id,),
+        ).fetchone()
+        if not r or r[0] != user_id:
+            return False
+        c.execute(
+            "UPDATE messages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (message_id,),
+        )
+    return True
+
+
+def read_receipt_set(user_id: int, other_id: int, last_read_message_id: int) -> None:
+    with get_conn() as c:
+        c.execute(
+            """INSERT INTO read_receipts (user_id, other_id, last_read_message_id, updated_at)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(user_id, other_id) DO UPDATE SET
+                 last_read_message_id = excluded.last_read_message_id,
+                 updated_at = CURRENT_TIMESTAMP""",
+            (user_id, other_id, last_read_message_id),
+        )
+
+
+def read_receipt_get(user_id: int, other_id: int) -> int | None:
+    """آخرین پیام‌خوانده‌شده توسط user_id در چت با other_id (برای نمایش تیک خوانده‌شده)."""
+    with get_conn() as c:
+        r = c.execute(
+            "SELECT last_read_message_id FROM read_receipts WHERE user_id = ? AND other_id = ?",
+            (user_id, other_id),
+        ).fetchone()
+        return r[0] if r else None
+
+
+def block_add(blocker_id: int, blocked_id: int) -> bool:
+    if blocker_id == blocked_id:
+        return False
+    with get_conn() as c:
+        try:
+            c.execute(
+                "INSERT INTO blocked (blocker_id, blocked_id) VALUES (?, ?)",
+                (blocker_id, blocked_id),
+            )
+            return True
+        except sqlite3.IntegrityError:
+            return True
+
+
+def block_remove(blocker_id: int, blocked_id: int) -> bool:
+    with get_conn() as c:
+        c.execute(
+            "DELETE FROM blocked WHERE blocker_id = ? AND blocked_id = ?",
+            (blocker_id, blocked_id),
+        )
+    return True
+
+
+def block_list(blocker_id: int) -> list[dict]:
+    with get_conn() as c:
+        rows = c.execute(
+            "SELECT blocked_id FROM blocked WHERE blocker_id = ? ORDER BY blocked_id",
+            (blocker_id,),
+        ).fetchall()
+    return [get_user_by_id(r[0]) for r in rows if get_user_by_id(r[0])]
+
+
+def user_delete(user_id: int) -> bool:
+    """حذف کاربر و پیام‌هایش (ادمین)."""
+    with get_conn() as c:
+        c.execute("DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?", (user_id, user_id))
+        c.execute("DELETE FROM blocked WHERE blocker_id = ? OR blocked_id = ?", (user_id, user_id))
+        c.execute("DELETE FROM read_receipts WHERE user_id = ? OR other_id = ?", (user_id, user_id))
+        c.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    return True
+
+
+def user_ban(user_id: int) -> bool:
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(users)")
+        if "is_banned" not in [r[1] for r in cur.fetchall()]:
+            return False
+        c.execute("UPDATE users SET is_banned = 1 WHERE id = ?", (user_id,))
+    return True
+
+
+def user_unban(user_id: int) -> bool:
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(users)")
+        if "is_banned" not in [r[1] for r in cur.fetchall()]:
+            return False
+        c.execute("UPDATE users SET is_banned = 0 WHERE id = ?", (user_id,))
+    return True
+
+
+def admin_set_user_password(user_id: int, new_password: str) -> tuple[bool, str]:
+    import config
+    new_password = (new_password or "")[: config.MAX_PASSWORD_LEN]
+    if len(new_password) < config.MIN_PASSWORD_LEN:
+        return False, f"رمز حداقل {config.MIN_PASSWORD_LEN} کاراکتر."
+    with get_conn() as c:
+        c.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (hash_password(new_password), user_id),
+        )
+    return True, ""

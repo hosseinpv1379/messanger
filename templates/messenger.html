@@ -72,6 +72,17 @@
     margin-bottom: 0.5rem;
     padding: 0.25rem 0;
 }
+.chat-placeholder .history-search {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.chat-placeholder .history-search input { flex: 1; max-width: 200px; margin: 0; }
+.chat-with { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.chat-with .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+.msg { position: relative; }
+.msg .msg-del { position: absolute; left: 0; top: 0; padding: 0.2rem 0.4rem; font-size: 0.75rem; opacity: 0.8; }
+.msg .msg-read { font-size: 0.7rem; margin-top: 0.15rem; }
 .chat-placeholder .history-list { list-style: none; margin: 0; padding: 0; }
 .chat-placeholder .history-item {
     display: block;
@@ -199,6 +210,10 @@
         <div class="chat-placeholder" id="chatPlaceholder">
             <div class="history-section">
                 <div class="history-title">گفتگوهای اخیر</div>
+                <div class="history-search">
+                    <input type="text" id="convoSearch" placeholder="جستجو در گفتگوها..." autocomplete="off">
+                    <button type="button" class="btn btn-secondary" id="convoSearchBtn">جستجو</button>
+                </div>
                 <ul class="history-list" id="historyList"></ul>
                 <div class="history-empty" id="historyEmpty" style="display: none;">
                     هنوز گفتگویی ندارید. نام کاربری طرف را پایین وارد کنید و چت جدید باز کنید.
@@ -206,7 +221,10 @@
             </div>
         </div>
         <div class="chat-active" id="chatActive">
-            <div class="chat-with" id="chatHeader"></div>
+            <div class="chat-with" id="chatHeader">
+                <span id="chatHeaderTitle"></span>
+                <button type="button" class="btn btn-ghost btn-sm" id="blockBtn" style="display: none;">مسدود کردن</button>
+            </div>
             <div class="chat-messages" id="chatMessages"></div>
             <form class="chat-form" id="chatForm">
                 <div class="form-row">
@@ -245,10 +263,30 @@ const filePreview = document.getElementById('filePreview');
 const toastEl = document.getElementById('toast');
 const historyList = document.getElementById('historyList');
 const historyEmpty = document.getElementById('historyEmpty');
+const convoSearch = document.getElementById('convoSearch');
+const convoSearchBtn = document.getElementById('convoSearchBtn');
+const chatHeaderTitle = document.getElementById('chatHeaderTitle');
+const blockBtn = document.getElementById('blockBtn');
 
 let currentOtherId = null;
 let currentOtherName = null;
 let selectedFile = null;
+let iBlockedThem = false;
+var chatPollInterval = null;
+
+function stopChatPoll() {
+    if (chatPollInterval) {
+        clearInterval(chatPollInterval);
+        chatPollInterval = null;
+    }
+}
+
+function startChatPoll() {
+    if (chatPollInterval) return;
+    chatPollInterval = setInterval(function() {
+        if (currentOtherId) loadChat(true);
+    }, 3500);
+}
 
 function showOpenError(msg) {
     openError.textContent = msg || '';
@@ -278,13 +316,16 @@ fileInput.addEventListener('change', function() {
     filePreview.textContent = selectedFile ? selectedFile.name : '';
 });
 
-function loadConversations() {
-    fetch('/api/conversations')
+function loadConversations(q) {
+    var url = '/api/conversations';
+    if (q) url += '?q=' + encodeURIComponent(q);
+    fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(list) {
             if (!Array.isArray(list) || list.length === 0) {
                 historyList.innerHTML = '';
                 historyEmpty.style.display = 'block';
+                historyEmpty.textContent = q ? 'نتیجه‌ای یافت نشد.' : 'هنوز گفتگویی ندارید. نام کاربری طرف را پایین وارد کنید و چت جدید باز کنید.';
                 return;
             }
             historyEmpty.style.display = 'none';
@@ -307,7 +348,7 @@ function loadConversations() {
                     currentOtherName = name;
                     chatPlaceholder.style.display = 'none';
                     chatActive.classList.add('visible');
-                    chatHeader.textContent = 'گفتگو با ' + name;
+                    if (chatHeaderTitle) chatHeaderTitle.textContent = 'گفتگو با ' + name;
                     backBtn.classList.add('visible');
                     headerTitle.textContent = name;
                     loadChat();
@@ -321,7 +362,13 @@ function loadConversations() {
         });
 }
 
+if (convoSearchBtn && convoSearch) {
+    convoSearchBtn.addEventListener('click', function() { loadConversations(convoSearch.value.trim()); });
+    convoSearch.addEventListener('keydown', function(e) { if (e.key === 'Enter') loadConversations(convoSearch.value.trim()); });
+}
+
 backBtn.addEventListener('click', function() {
+    stopChatPoll();
     chatActive.classList.remove('visible');
     chatPlaceholder.style.display = 'flex';
     headerTitle.textContent = 'مسنجر — ' + username;
@@ -354,7 +401,7 @@ btnOpenChat.addEventListener('click', async function() {
         currentOtherName = data.username;
         chatPlaceholder.style.display = 'none';
         chatActive.classList.add('visible');
-        chatHeader.textContent = 'گفتگو با ' + currentOtherName;
+        if (chatHeaderTitle) chatHeaderTitle.textContent = 'گفتگو با ' + currentOtherName;
         backBtn.classList.add('visible');
         headerTitle.textContent = currentOtherName;
         loadChat();
@@ -364,10 +411,13 @@ btnOpenChat.addEventListener('click', async function() {
     }
 });
 
-function buildMessageHtml(m) {
+function buildMessageHtml(m, otherReadUpTo) {
     var sent = m.sender_id === userId;
     var cls = sent ? 'sent' : 'received';
     var parts = [];
+    if (sent && m.id) {
+        parts.push('<button type="button" class="msg-del btn btn-ghost" data-msg-id="' + m.id + '" title="حذف پیام">×</button>');
+    }
     if (m.message_type === 'image' && m.id) {
         parts.push('<img class="msg-img" src="/api/file/' + m.id + '" alt="عکس" loading="lazy">');
     }
@@ -380,21 +430,74 @@ function buildMessageHtml(m) {
     if (parts.length === 0) {
         parts.push('[پیام]');
     }
-    return '<div class="msg ' + cls + '">' + parts.join('') + '<time>' + escapeHtml(m.created_at) + '</time></div>';
+    parts.push('<time>' + escapeHtml(m.created_at) + '</time>');
+    if (sent && otherReadUpTo != null && m.id <= otherReadUpTo) {
+        parts.push('<span class="msg-read">✓✓</span>');
+    }
+    return '<div class="msg ' + cls + '" data-msg-id="' + (m.id || '') + '">' + parts.join('') + '</div>';
 }
 
-function loadChat() {
+function loadChat(isPolling) {
     if (!currentOtherId) return;
+    var wasAtBottom = !isPolling || (chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 80);
     fetch('/api/chat/' + currentOtherId)
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.error) {
-                chatMessages.innerHTML = '<p class="error">' + escapeHtml(data.error) + '</p>';
+                if (!isPolling) chatMessages.innerHTML = '<p class="error">' + escapeHtml(data.error) + '</p>';
                 return;
             }
-            chatMessages.innerHTML = data.messages.map(buildMessageHtml).join('');
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            iBlockedThem = data.i_blocked_them || false;
+            if (blockBtn) {
+                blockBtn.style.display = 'inline-flex';
+                blockBtn.textContent = iBlockedThem ? 'رفع مسدودیت' : 'مسدود کردن';
+            }
+            var otherReadUpTo = data.other_read_up_to != null ? data.other_read_up_to : null;
+            chatMessages.innerHTML = data.messages.map(function(m) { return buildMessageHtml(m, otherReadUpTo); }).join('');
+            chatMessages.querySelectorAll('.msg-del').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var mid = parseInt(btn.getAttribute('data-msg-id'), 10);
+                    if (mid !== mid) return;
+                    fetch('/api/message/' + mid, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRF-Token': csrfToken }
+                    }).then(function(r) { return r.json(); }).then(function(res) {
+                        if (res.ok) {
+                            var el = chatMessages.querySelector('.msg[data-msg-id="' + mid + '"]');
+                            if (el) el.remove();
+                        } else { showToast(res.error || 'خطا'); }
+                    });
+                });
+            });
+            if (wasAtBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
+            var maxId = 0;
+            data.messages.forEach(function(m) { if (m.id > maxId) maxId = m.id; });
+            if (maxId > 0) {
+                fetch('/api/chat/' + currentOtherId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                    body: JSON.stringify({ read_receipt: true, last_read_message_id: maxId })
+                });
+            }
+            if (!isPolling) startChatPoll();
         });
+}
+
+if (blockBtn) {
+    blockBtn.addEventListener('click', function() {
+        if (!currentOtherId) return;
+        var method = iBlockedThem ? 'DELETE' : 'POST';
+        fetch('/api/block/' + currentOtherId, {
+            method: method,
+            headers: { 'X-CSRF-Token': csrfToken }
+        }).then(function(r) { return r.json(); }).then(function(res) {
+            if (res.ok) {
+                iBlockedThem = !iBlockedThem;
+                blockBtn.textContent = iBlockedThem ? 'رفع مسدودیت' : 'مسدود کردن';
+                showToast(iBlockedThem ? 'مسدود شد.' : 'رفع مسدودیت شد.');
+            } else { showToast(res.error || 'خطا'); }
+        });
+    });
 }
 
 loadConversations();

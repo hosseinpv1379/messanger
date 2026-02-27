@@ -10,6 +10,14 @@
     margin-bottom: 2rem;
 }
 .admin-header h1 { margin: 0; font-size: 1.35rem; }
+.admin-stats {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+.admin-stats span { color: var(--text-soft); }
+.admin-stats strong { color: var(--accent); }
 .card {
     background: var(--surface);
     border-radius: var(--radius);
@@ -27,6 +35,8 @@
     .add-form { grid-template-columns: 1fr; }
     .add-form .btn { width: 100%; }
 }
+.search-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.search-form input { flex: 1; max-width: 280px; }
 .users-table {
     width: 100%;
     border-collapse: collapse;
@@ -44,6 +54,10 @@
 }
 .users-table tr:last-child td { border-bottom: none; }
 .users-table .date-cell { color: var(--text-soft); font-size: 0.9rem; }
+.users-table .banned { color: var(--danger); font-size: 0.85rem; }
+.users-table .actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.users-table .actions form { display: inline; }
+.users-table .actions .btn { padding: 0.35rem 0.6rem; font-size: 0.8rem; }
 @media (max-width: 500px) {
     .users-table th, .users-table td { padding: 0.6rem; font-size: 0.9rem; }
 }
@@ -51,6 +65,8 @@
 .password-form { display: flex; flex-direction: column; gap: 1rem; max-width: 360px; }
 .password-form .btn { align-self: flex-start; }
 .success-msg { color: var(--accent); margin-bottom: 0.5rem; }
+.reset-inline { display: flex; gap: 0.35rem; align-items: center; margin-top: 0.25rem; }
+.reset-inline input { width: 120px; margin: 0; }
 {% endblock %}
 {% block body %}
 <div class="container">
@@ -58,6 +74,12 @@
         <h1>پنل مدیریت</h1>
         <a href="{{ url_for('logout') }}" class="btn btn-secondary">خروج</a>
     </header>
+    {% if stats %}
+    <div class="admin-stats">
+        <span>کاربران: <strong>{{ stats.users_count }}</strong></span>
+        <span>پیام‌ها: <strong>{{ stats.messages_count }}</strong></span>
+    </div>
+    {% endif %}
     <section class="card">
         <h2>تغییر رمز عبور ادمین</h2>
         {% if change_password_ok %}
@@ -103,28 +125,60 @@
     </section>
     <section class="card">
         <h2>کاربران</h2>
+        <form method="get" action="{{ url_for('admin_panel') }}" class="search-form">
+            <input type="text" name="q" value="{{ search or '' }}" placeholder="جستجو نام کاربری...">
+            <button type="submit" class="btn btn-secondary">جستجو</button>
+        </form>
+        {% if reset_error and reset_user_id %}
+        <p class="error">ریست رمز: {{ reset_error }}</p>
+        {% endif %}
         {% if users %}
         <div style="overflow-x: auto;">
             <table class="users-table">
                 <thead>
                     <tr>
                         <th>نام کاربری</th>
+                        <th>وضعیت</th>
                         <th>تاریخ ایجاد</th>
+                        <th>عملیات</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for u in users %}
                     <tr>
                         <td><strong>{{ u.username }}</strong></td>
+                        <td>{% if u.is_banned %}<span class="banned">مسدود</span>{% else %}فعال{% endif %}</td>
                         <td class="date-cell">{{ u.created_at }}</td>
+                        <td class="actions">
+                            <form method="post" action="{{ url_for('admin_reset_user_password', user_id=u.id) }}" class="reset-inline" style="display: inline-flex;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="password" name="new_password" placeholder="رمز جدید" minlength="4" maxlength="128">
+                                <button type="submit" class="btn">ریست رمز</button>
+                            </form>
+                            {% if u.is_banned %}
+                            <form method="post" action="{{ url_for('admin_unban_user', user_id=u.id) }}" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="btn btn-secondary">آزاد کردن</button>
+                            </form>
+                            {% else %}
+                            <form method="post" action="{{ url_for('admin_ban_user', user_id=u.id) }}" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="btn btn-secondary">مسدود</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{{ url_for('admin_delete_user', user_id=u.id) }}" style="display: inline;" onsubmit="return confirm('حذف این کاربر و همه پیام‌هایش؟');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <button type="submit" class="btn" style="background: var(--danger);">حذف</button>
+                            </form>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        <p style="margin-top: 1rem; color: var(--text-soft); font-size: 0.85rem;">این <strong>نام کاربری</strong> را به کاربر بدهید؛ دیگران با وارد کردن همین نام کاربری (مثل تلگرام) می‌توانند با او چت کنند.</p>
+        <p style="margin-top: 1rem; color: var(--text-soft); font-size: 0.85rem;">جستجو، مسدود/آزاد، ریست رمز، حذف کاربر.</p>
         {% else %}
-        <p class="users-empty">هنوز کاربری ثبت نشده است. از فرم بالا کاربر اضافه کنید.</p>
+        <p class="users-empty">{% if search %}نتیجه‌ای یافت نشد.{% else %}هنوز کاربری ثبت نشده است. از فرم بالا کاربر اضافه کنید.{% endif %}</p>
         {% endif %}
     </section>
 </div>

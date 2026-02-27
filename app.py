@@ -101,12 +101,26 @@ def logout():
 @app.route("/admin")
 @admin_required
 def admin_panel():
-    users = db.user_list()
+    search = (request.args.get("q") or "").strip()
+    users = db.user_list(search=search)
+    stats = _admin_stats()
     return render_template(
         "admin.html",
         users=users,
+        search=search,
+        stats=stats,
         csrf_token=security.csrf_token(session),
     )
+
+
+def _admin_stats():
+    conn = db.get_conn()
+    try:
+        users_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        msg_count = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        return {"users_count": users_count, "messages_count": msg_count}
+    finally:
+        conn.close()
 
 
 @app.route("/admin/add-user", methods=["POST"])
@@ -122,6 +136,7 @@ def admin_add_user():
     return render_template(
         "admin.html",
         users=db.user_list(),
+        stats=_admin_stats(),
         add_error=msg,
         csrf_token=security.csrf_token(session),
     )
@@ -148,15 +163,64 @@ def admin_change_password():
         return render_template(
             "admin.html",
             users=db.user_list(),
+            stats=_admin_stats(),
             change_password_ok=True,
             csrf_token=security.csrf_token(session),
         )
     return render_template(
         "admin.html",
         users=db.user_list(),
+        stats=_admin_stats(),
         change_password_error=msg,
         csrf_token=security.csrf_token(session),
     )
+
+
+@app.route("/admin/user/<int:user_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_user(user_id):
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return redirect(url_for("admin_panel"))
+    db.user_delete(user_id)
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/user/<int:user_id>/ban", methods=["POST"])
+@admin_required
+def admin_ban_user(user_id):
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return redirect(url_for("admin_panel"))
+    db.user_ban(user_id)
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/user/<int:user_id>/unban", methods=["POST"])
+@admin_required
+def admin_unban_user(user_id):
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return redirect(url_for("admin_panel"))
+    db.user_unban(user_id)
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/user/<int:user_id>/reset-password", methods=["POST"])
+@admin_required
+def admin_reset_user_password(user_id):
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return redirect(url_for("admin_panel"))
+    new_pw = (request.form.get("new_password") or "")[: config.MAX_PASSWORD_LEN]
+    ok, msg = db.admin_set_user_password(user_id, new_pw)
+    if not ok:
+    return render_template(
+        "admin.html",
+        users=db.user_list(),
+        search=request.args.get("q", ""),
+        stats=_admin_stats(),
+        reset_error=msg,
+        reset_user_id=user_id,
+        csrf_token=security.csrf_token(session),
+    )
+    return redirect(url_for("admin_panel"))
 
 
 @app.route("/messenger")
@@ -208,9 +272,10 @@ def user_change_password():
 @app.route("/api/conversations")
 @user_required
 def api_conversations():
-    """لیست گفتگوهای اخیر (هیستوری چت) برای نمایش به کاربر."""
+    """لیست گفتگوهای اخیر. q= جستجو در نام کاربری."""
     uid = session["user_id"]
-    convos = db.get_conversations(uid)
+    q = (request.args.get("q") or "").strip()
+    convos = db.get_conversations(uid, search=q)
     return jsonify(convos)
 
 
@@ -227,15 +292,29 @@ def api_user_by_username(username):
     return jsonify(user)
 
 
-@app.route("/api/chat/<int:other_id>")
+@app.route("/api/chat/<int:other_id>", methods=["GET", "POST"])
 @user_required
 def api_chat(other_id):
     uid = session["user_id"]
+    if request.method == "POST":
+        data = request.get_json() or {}
+        if data.get("read_receipt"):
+            mid = data.get("last_read_message_id", 0)
+            if mid:
+                db.read_receipt_set(uid, other_id, int(mid))
+        return jsonify({"ok": True})
     messages = db.messages_for_user(uid, other_id)
     other = db.get_user_by_id(other_id)
     if not other:
         return jsonify({"error": "کاربر یافت نشد"}), 404
-    return jsonify({"other": other, "messages": messages})
+    other_read_up_to = db.read_receipt_get(other_id, uid)
+    i_blocked_them = db.is_blocked(uid, other_id)
+    return jsonify({
+        "other": other,
+        "messages": messages,
+        "other_read_up_to": other_read_up_to,
+        "i_blocked_them": i_blocked_them,
+    })
 
 
 def _get_csrf_from_request():
@@ -268,6 +347,8 @@ def api_send():
             return jsonify({"ok": False, "error": "نمی‌توانید به خودتان پیام بفرستید"}), 400
         if db.get_user_by_id(receiver_id) is None:
             return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
+        if db.is_blocked(receiver_id, uid):
+            return jsonify({"ok": False, "error": "شما توسط این کاربر مسدود شده‌اید"}), 403
         fn = (f.filename or "").strip() or "file"
         ext = Path(fn).suffix.lower()
         content = f.read()
@@ -308,9 +389,47 @@ def api_send():
         return jsonify({"ok": False, "error": "نمی‌توانید به خودتان پیام بفرستید"}), 400
     if db.get_user_by_id(receiver_id) is None:
         return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
+    if db.is_blocked(receiver_id, uid):
+        return jsonify({"ok": False, "error": "شما توسط این کاربر مسدود شده‌اید"}), 403
     if not db.message_send(uid, receiver_id, body):
         return jsonify({"ok": False, "error": "خطا در ارسال پیام"}), 500
     return jsonify({"ok": True})
+
+
+@app.route("/api/message/<int:message_id>", methods=["DELETE"])
+@user_required
+def api_delete_message(message_id):
+    uid = session["user_id"]
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
+        return jsonify({"ok": False, "error": "درخواست نامعتبر"}), 403
+    if db.message_delete(message_id, uid):
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "امکان حذف این پیام نیست"}), 400
+
+
+@app.route("/api/block/<int:other_id>", methods=["POST", "DELETE"])
+@user_required
+def api_block(other_id):
+    uid = session["user_id"]
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
+        return jsonify({"ok": False, "error": "درخواست نامعتبر"}), 403
+    if other_id == uid:
+        return jsonify({"ok": False, "error": "امکان مسدود کردن خودتان نیست"}), 400
+    if db.get_user_by_id(other_id) is None:
+        return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
+    if request.method == "POST":
+        db.block_add(uid, other_id)
+        return jsonify({"ok": True})
+    db.block_remove(uid, other_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/blocked")
+@user_required
+def api_blocked_list():
+    uid = session["user_id"]
+    users = db.block_list(uid)
+    return jsonify(users)
 
 
 @app.route("/api/file/<int:message_id>")
