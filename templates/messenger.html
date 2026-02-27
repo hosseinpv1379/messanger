@@ -916,6 +916,32 @@ html.theme-light .chat-messages {
     line-height: 1;
 }
 .reply-bar-close:hover { background: var(--tg-border); color: var(--tg-text); }
+.upload-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    min-height: 28px;
+}
+.upload-progress-bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--tg-border);
+    overflow: hidden;
+}
+.upload-progress-bar-inner {
+    height: 100%;
+    width: 0%;
+    background: var(--tg-blue);
+    border-radius: 3px;
+    transition: width 0.15s ease-out;
+}
+.upload-progress-text {
+    font-size: 12px;
+    color: var(--tg-text-secondary);
+    min-width: 2.5em;
+}
 .tg-chat-list .history-item .h-unread {
     min-width: 18px; height: 18px; padding: 0 5px;
     border-radius: 9px;
@@ -1538,6 +1564,11 @@ html.theme-light .chat-messages {
                     <div class="reply-bar-preview" id="replyBarPreview"></div>
                     <button type="button" class="reply-bar-close" id="replyBarClose" aria-label="لغو پاسخ">×</button>
                 </div>
+                <!-- نوار پیشرفت آپلود فایل/مدیا -->
+                <div class="upload-progress-wrap" id="uploadProgressWrap" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="پیشرفت ارسال">
+                    <div class="upload-progress-bar" id="uploadProgressBar"><div class="upload-progress-bar-inner" id="uploadProgressBarInner"></div></div>
+                    <span class="upload-progress-text" id="uploadProgressText">0%</span>
+                </div>
                 <!-- ردیف اصلی: ورودی + دکمه‌ها -->
                 <div class="composer-row">
                     <input type="text" id="msgInput" class="composer-input" placeholder="پیام..." autocomplete="off" maxlength="4096">
@@ -1710,6 +1741,9 @@ const attachmentThumb = document.getElementById('attachmentThumb');
 const attachmentFileIcon = document.getElementById('attachmentFileIcon');
 const attachmentName = document.getElementById('attachmentName');
 const attachmentRemove = document.getElementById('attachmentRemove');
+const uploadProgressWrap = document.getElementById('uploadProgressWrap');
+const uploadProgressBarInner = document.getElementById('uploadProgressBarInner');
+const uploadProgressText = document.getElementById('uploadProgressText');
 const btnSend = document.getElementById('btnSend');
 const btnVoice = document.getElementById('btnVoice');
 var attachmentThumbUrl = null;
@@ -1724,6 +1758,42 @@ function clearAttachmentStrip() {
     }
     if (attachmentFileIcon) attachmentFileIcon.style.display = '';
     if (attachmentStrip) attachmentStrip.classList.remove('visible');
+}
+function showUploadProgress(pct) {
+    var n = Math.min(100, Math.max(0, Math.round(pct)));
+    if (uploadProgressWrap) { uploadProgressWrap.style.display = 'flex'; uploadProgressWrap.setAttribute('aria-valuenow', n); }
+    if (uploadProgressBarInner) uploadProgressBarInner.style.width = n + '%';
+    if (uploadProgressText) uploadProgressText.textContent = n + '%';
+}
+function hideUploadProgress() {
+    if (uploadProgressWrap) { uploadProgressWrap.style.display = 'none'; uploadProgressWrap.setAttribute('aria-valuenow', 0); }
+    if (uploadProgressBarInner) uploadProgressBarInner.style.width = '0%';
+    if (uploadProgressText) uploadProgressText.textContent = '0%';
+}
+function uploadWithProgress(url, formData) {
+    return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+        xhr.responseType = 'json';
+        xhr.upload.addEventListener('progress', function(e) {
+            if (e.lengthComputable) showUploadProgress((e.loaded / e.total) * 100);
+            else showUploadProgress(50);
+        });
+        xhr.addEventListener('load', function() {
+            hideUploadProgress();
+            var res = { ok: xhr.status >= 200 && xhr.status < 300 };
+            try {
+                if (xhr.response && typeof xhr.response === 'object') res = xhr.response;
+                else res = JSON.parse(xhr.responseText || '{}');
+            } catch (err) { res.error = res.error || 'پاسخ نامعتبر'; }
+            if (!res.hasOwnProperty('ok')) res.ok = xhr.status >= 200 && xhr.status < 300;
+            resolve(res);
+        });
+        xhr.addEventListener('error', function() { hideUploadProgress(); reject(new Error('خطای شبکه')); });
+        xhr.addEventListener('abort', function() { hideUploadProgress(); reject(new Error('لغو شد')); });
+        xhr.send(formData);
+    });
 }
 const voicePreview = document.getElementById('voicePreview');
 const voicePreviewAudio = document.getElementById('voicePreviewAudio');
@@ -2233,8 +2303,7 @@ if (btnSendVoice) {
         var url = currentGroupId ? ('/api/groups/' + currentGroupId + '/send') : '/api/send';
         if (!currentGroupId) fd.append('receiver_id', currentOtherId);
         try {
-            var r = await fetch(url, { method: 'POST', body: fd });
-            var res = await r.json();
+            var res = await uploadWithProgress(url, fd);
             if (res.ok) {
                 hideVoicePreview();
                 if (currentGroupId) loadGroupChat(); else loadChat();
@@ -2242,7 +2311,8 @@ if (btnSendVoice) {
             } else {
                 showToast(res.error || 'خطا در ارسال ویس');
             }
-        } finally {
+        } catch (err) { showToast(err && err.message || 'خطا در ارسال ویس'); }
+        finally {
             btnSendVoice.disabled = false;
         }
     });
@@ -2664,16 +2734,17 @@ if (profileSaveBtn) profileSaveBtn.addEventListener('click', function() {
     var hasAvatar = profileAvatarInput && profileAvatarInput.files[0];
     if (hasAvatar) {
         fd.append('csrf_token', csrfToken);
-        fetch('/api/me/avatar', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: fd })
-            .then(function(r) { return r.json(); })
+        uploadWithProgress('/api/me/avatar', fd)
             .then(function(res) {
                 if (!res.ok) { showToast(res.error || 'خطا'); profileSaveBtn.disabled = false; return; }
-                fetch('/api/me', {
+                return fetch('/api/me', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
                     body: JSON.stringify({ display_name: displayName, bio: bio })
-                }).then(function(r2) { return r2.json(); }).then(function() { showToast('ذخیره شد'); done(); });
-            });
+                }).then(function(r2) { return r2.json(); });
+            })
+            .then(function(next) { if (next !== undefined) { showToast('ذخیره شد'); done(); } })
+            .catch(function(err) { showToast(err && err.message || 'خطا'); profileSaveBtn.disabled = false; });
     } else {
         fetch('/api/me', {
             method: 'PATCH',
@@ -3706,14 +3777,14 @@ chatForm.addEventListener('submit', async function(e) {
             fd.append('body', body);
             fd.append('csrf_token', csrfToken);
             try {
-                var r = await fetch('/api/groups/' + currentGroupId + '/send', { method: 'POST', body: fd });
-                var res = await r.json();
+                var res = await uploadWithProgress('/api/groups/' + currentGroupId + '/send', fd);
                 if (res.ok) {
                     msgInput.value = '';
                     clearAttachmentStrip();
                     loadGroupChat();
                 } else { showToast(res.error || 'خطا در ارسال'); }
-            } finally { btn.disabled = false; }
+            } catch (err) { showToast(err && err.message || 'خطا در ارسال'); }
+            finally { btn.disabled = false; }
         } else {
             if (!body) return;
             btn.disabled = true;
@@ -3768,14 +3839,14 @@ chatForm.addEventListener('submit', async function(e) {
             fd.append('csrf_token', csrfToken);
         }
         try {
-            var r = await fetch('/api/send', { method: 'POST', body: fd });
-            var res = await r.json();
-            if (res.ok) {
-                msgInput.value = '';
-                clearAttachmentStrip();
-                loadChat();
-            } else { showToast(res.error || 'خطا در ارسال'); }
-        } finally { btn.disabled = false; }
+                var res = await uploadWithProgress('/api/send', fd);
+                if (res.ok) {
+                    msgInput.value = '';
+                    clearAttachmentStrip();
+                    loadChat();
+                } else { showToast(res.error || 'خطا در ارسال'); }
+            } catch (err) { showToast(err && err.message || 'خطا در ارسال'); }
+            finally { btn.disabled = false; }
         return;
     }
     if (!body) return;
