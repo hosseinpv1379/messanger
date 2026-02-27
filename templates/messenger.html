@@ -47,7 +47,7 @@
     flex-wrap: wrap;
 }
 .open-chat-bar label { margin: 0; font-size: 0.9rem; }
-.open-chat-bar input[type="number"] { width: 100px; max-width: 120px; }
+.open-chat-bar input[type="text"] { width: 140px; max-width: 180px; }
 .open-chat-bar .open-error { color: var(--danger); width: 100%; font-size: 0.85rem; margin-top: 0.25rem; }
 .chat-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .chat-placeholder {
@@ -103,9 +103,20 @@
     display: block;
     margin-top: 0.35rem;
 }
+.chat-messages .msg .msg-img {
+    max-width: 100%;
+    border-radius: 8px;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+.chat-messages .msg .msg-file {
+    color: inherit;
+    text-decoration: underline;
+}
 .chat-form {
     display: flex;
     gap: 0.5rem;
+    align-items: flex-end;
     padding: 1rem;
     padding-left: max(1rem, var(--safe-top));
     padding-right: max(1rem, var(--safe-bottom));
@@ -113,8 +124,10 @@
     border-top: 1px solid var(--border);
     background: var(--surface);
 }
-.chat-form input { flex: 1; min-width: 0; margin: 0; }
-.chat-form button { flex-shrink: 0; }
+.chat-form .form-row { flex: 1; display: flex; gap: 0.5rem; min-width: 0; }
+.chat-form input[type="text"] { flex: 1; min-width: 0; margin: 0; }
+.chat-form .btn-attach { flex-shrink: 0; padding: 0.65rem 0.9rem; }
+.chat-form .file-name { font-size: 0.8rem; color: var(--text-soft); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loading { opacity: 0.7; pointer-events: none; }
 .toast {
     position: fixed;
@@ -142,23 +155,28 @@
         <span class="title" id="headerTitle">مسنجر — {{ username }}</span>
     </header>
     <div class="open-chat-bar">
-        <label for="otherId">شناسه کاربر:</label>
-        <input type="number" id="otherId" placeholder="مثلاً 2" min="1" step="1" inputmode="numeric">
+        <label for="otherUsername">نام کاربری:</label>
+        <input type="text" id="otherUsername" placeholder="مثال: ali" autocomplete="off" dir="ltr" style="text-align: left;">
         <button type="button" class="btn" id="btnOpenChat">باز کردن چت</button>
         <span class="open-error" id="openError"></span>
     </div>
     <div class="chat-body">
         <div class="chat-placeholder" id="chatPlaceholder">
-            شناسه کاربری که می‌خواهید با او چت کنید را وارد کنید.<br>
-            فقط با کسی که شناسه‌اش را دارید می‌توانید گفتگو کنید.
+            نام کاربری طرف مقابل را وارد کنید (مثل تلگرام).<br>
+            عکس و فایل هم می‌توانید بفرستید.
         </div>
         <div class="chat-active" id="chatActive">
             <div class="chat-with" id="chatHeader"></div>
             <div class="chat-messages" id="chatMessages"></div>
             <form class="chat-form" id="chatForm">
-                <input type="text" id="msgInput" placeholder="پیام... (رمزنگاری می‌شود)" autocomplete="off" maxlength="4096">
+                <div class="form-row">
+                    <input type="text" id="msgInput" placeholder="پیام یا توضیح برای فایل..." autocomplete="off" maxlength="4096">
+                    <button type="button" class="btn btn-secondary btn-attach" id="btnAttach" title="عکس یا فایل">📎</button>
+                </div>
+                <input type="file" id="fileInput" accept="image/*,.pdf,.doc,.docx,.txt,.zip,.rar,.mp3,.mp4,.webm,.ogg,.wav,.m4a" style="display: none;">
                 <button type="submit" class="btn">ارسال</button>
             </form>
+            <div class="file-name" id="filePreview"></div>
         </div>
     </div>
 </div>
@@ -172,7 +190,7 @@ const csrfToken = {{ csrf_token | tojson }};
 
 const backBtn = document.getElementById('backBtn');
 const headerTitle = document.getElementById('headerTitle');
-const otherIdInput = document.getElementById('otherId');
+const otherUsernameInput = document.getElementById('otherUsername');
 const btnOpenChat = document.getElementById('btnOpenChat');
 const openError = document.getElementById('openError');
 const chatPlaceholder = document.getElementById('chatPlaceholder');
@@ -181,10 +199,14 @@ const chatHeader = document.getElementById('chatHeader');
 const chatMessages = document.getElementById('chatMessages');
 const chatForm = document.getElementById('chatForm');
 const msgInput = document.getElementById('msgInput');
+const btnAttach = document.getElementById('btnAttach');
+const fileInput = document.getElementById('fileInput');
+const filePreview = document.getElementById('filePreview');
 const toastEl = document.getElementById('toast');
 
 let currentOtherId = null;
 let currentOtherName = null;
+let selectedFile = null;
 
 function showOpenError(msg) {
     openError.textContent = msg || '';
@@ -208,6 +230,12 @@ function escapeHtml(s) {
     return div.innerHTML;
 }
 
+btnAttach.addEventListener('click', function() { fileInput.click(); });
+fileInput.addEventListener('change', function() {
+    selectedFile = this.files[0] || null;
+    filePreview.textContent = selectedFile ? selectedFile.name : '';
+});
+
 backBtn.addEventListener('click', function() {
     chatActive.classList.remove('visible');
     chatPlaceholder.style.display = 'flex';
@@ -215,38 +243,32 @@ backBtn.addEventListener('click', function() {
     backBtn.classList.remove('visible');
     currentOtherId = null;
     currentOtherName = null;
+    selectedFile = null;
+    filePreview.textContent = '';
+    fileInput.value = '';
     showOpenError('');
 });
 
 btnOpenChat.addEventListener('click', async function() {
-    const raw = otherIdInput.value.trim();
+    const raw = otherUsernameInput.value.trim();
     showOpenError('');
     if (!raw) {
-        showOpenError('شناسه را وارد کنید.');
-        return;
-    }
-    const id = parseInt(raw, 10);
-    if (id !== id || id < 1) {
-        showOpenError('شناسه معتبر نیست.');
-        return;
-    }
-    if (id === userId) {
-        showOpenError('نمی‌توانید با خودتان چت کنید.');
+        showOpenError('نام کاربری را وارد کنید.');
         return;
     }
     setLoading(true);
     try {
-        const r = await fetch('/api/chat/' + id);
+        const r = await fetch('/api/user-by-username/' + encodeURIComponent(raw));
         const data = await r.json();
-        if (r.status === 404 || data.error) {
+        if (r.status === 404 || r.status === 400 || data.error) {
             showOpenError(data.error || 'کاربر یافت نشد.');
             return;
         }
-        currentOtherId = id;
-        currentOtherName = data.other.username;
+        currentOtherId = data.id;
+        currentOtherName = data.username;
         chatPlaceholder.style.display = 'none';
         chatActive.classList.add('visible');
-        chatHeader.textContent = 'گفتگو با ' + currentOtherName + ' (شناسه ' + id + ')';
+        chatHeader.textContent = 'گفتگو با ' + currentOtherName;
         backBtn.classList.add('visible');
         headerTitle.textContent = currentOtherName;
         loadChat();
@@ -254,6 +276,25 @@ btnOpenChat.addEventListener('click', async function() {
         setLoading(false);
     }
 });
+
+function buildMessageHtml(m) {
+    var sent = m.sender_id === userId;
+    var cls = sent ? 'sent' : 'received';
+    var parts = [];
+    if (m.message_type === 'image' && m.id) {
+        parts.push('<img class="msg-img" src="/api/file/' + m.id + '" alt="عکس" loading="lazy">');
+    }
+    if (m.message_type === 'file' && m.id && m.file_name) {
+        parts.push('<a class="msg-file" href="/api/file/' + m.id + '" download="' + escapeHtml(m.file_name) + '">' + escapeHtml(m.file_name) + '</a>');
+    }
+    if (m.body) {
+        parts.push(escapeHtml(m.body));
+    }
+    if (parts.length === 0) {
+        parts.push('[پیام]');
+    }
+    return '<div class="msg ' + cls + '">' + parts.join('') + '<time>' + escapeHtml(m.created_at) + '</time></div>';
+}
 
 function loadChat() {
     if (!currentOtherId) return;
@@ -264,19 +305,43 @@ function loadChat() {
                 chatMessages.innerHTML = '<p class="error">' + escapeHtml(data.error) + '</p>';
                 return;
             }
-            chatMessages.innerHTML = data.messages.map(function(m) {
-                var sent = m.sender_id === userId;
-                return '<div class="msg ' + (sent ? 'sent' : 'received') + '">' + escapeHtml(m.body) + '<time>' + escapeHtml(m.created_at) + '</time></div>';
-            }).join('');
+            chatMessages.innerHTML = data.messages.map(buildMessageHtml).join('');
             chatMessages.scrollTop = chatMessages.scrollHeight;
         });
 }
 
 chatForm.addEventListener('submit', async function(e) {
     e.preventDefault();
+    if (!currentOtherId) return;
     var body = msgInput.value.trim();
-    if (!body || !currentOtherId) return;
     var btn = chatForm.querySelector('button[type="submit"]');
+
+    if (selectedFile) {
+        btn.disabled = true;
+        var fd = new FormData();
+        fd.append('file', selectedFile);
+        fd.append('receiver_id', currentOtherId);
+        fd.append('body', body);
+        fd.append('csrf_token', csrfToken);
+        try {
+            var r = await fetch('/api/send', { method: 'POST', body: fd });
+            var res = await r.json();
+            if (res.ok) {
+                msgInput.value = '';
+                selectedFile = null;
+                fileInput.value = '';
+                filePreview.textContent = '';
+                loadChat();
+            } else {
+                showToast(res.error || 'خطا در ارسال');
+            }
+        } finally {
+            btn.disabled = false;
+        }
+        return;
+    }
+
+    if (!body) return;
     btn.disabled = true;
     try {
         var r = await fetch('/api/send', {

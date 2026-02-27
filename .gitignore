@@ -1,5 +1,6 @@
 fernet.key
 messenger.db
+uploads/
 venv/
 __pycache__/
 *.pyc

@@ -161,16 +161,63 @@ def api_chat(other_id):
     return jsonify({"other": other, "messages": messages})
 
 
+def _get_csrf_from_request():
+    csrf = request.headers.get("X-CSRF-Token")
+    if csrf:
+        return csrf
+    if request.is_json:
+        return (request.get_json() or {}).get("csrf_token")
+    return request.form.get("csrf_token")
+
+
 @app.route("/api/send", methods=["POST"])
 @user_required
 def api_send():
     ip = security.get_client_ip()
     if not security.rate_limit(f"send:{ip}", security.RATE_API_SEND_PER_MIN):
         return jsonify({"ok": False, "error": "ارسال پیام زیاد است. کمی صبر کنید."}), 429
-    csrf = request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")
-    if not security.csrf_valid(session, csrf):
+    if not security.csrf_valid(session, _get_csrf_from_request()):
         return jsonify({"ok": False, "error": "درخواست نامعتبر."}), 403
     uid = session["user_id"]
+
+    # ارسال مدیا (عکس/فایل) با multipart
+    if request.files:
+        f = request.files.get("file")
+        receiver_id = request.form.get("receiver_id", type=int)
+        caption = (request.form.get("body") or request.form.get("caption") or "").strip()[: config.MAX_MESSAGE_LEN]
+        if not f or not receiver_id:
+            return jsonify({"ok": False, "error": "فایل یا گیرنده مشخص نیست"}), 400
+        if receiver_id == uid:
+            return jsonify({"ok": False, "error": "نمی‌توانید به خودتان پیام بفرستید"}), 400
+        if db.get_user_by_id(receiver_id) is None:
+            return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
+        fn = (f.filename or "").strip() or "file"
+        ext = Path(fn).suffix.lower()
+        content = f.read()
+        size = len(content)
+        if ext in config.ALLOWED_IMAGE_EXTENSIONS:
+            if size > config.MAX_IMAGE_SIZE:
+                return jsonify({"ok": False, "error": "حجم عکس حداکثر ۱۰ مگابایت"}), 400
+            message_type = "image"
+        else:
+            if size > config.MAX_FILE_SIZE:
+                return jsonify({"ok": False, "error": "حجم فایل حداکثر ۲۵ مگابایت"}), 400
+            message_type = "file"
+        config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        safe_name = f"{uuid.uuid4().hex}{ext}"
+        file_path = config.UPLOAD_DIR / safe_name
+        enc_content = encrypt_bytes(content)
+        if not enc_content:
+            return jsonify({"ok": False, "error": "خطا در رمزنگاری فایل"}), 500
+        file_path.write_bytes(enc_content)
+        rel_path = safe_name
+        mime = (getattr(f, "content_type") or "") or ("image/jpeg" if message_type == "image" else "application/octet-stream")
+        if not db.message_send_media(uid, receiver_id, caption, message_type, str(rel_path), fn, mime):
+            file_path.unlink(missing_ok=True)
+            return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
+        return jsonify({"ok": True})
+
+    # ارسال متن ساده (JSON)
     data = request.get_json() or {}
     receiver_id = data.get("receiver_id")
     body = (data.get("body") or "").strip()
@@ -187,6 +234,26 @@ def api_send():
     if not db.message_send(uid, receiver_id, body):
         return jsonify({"ok": False, "error": "خطا در ارسال پیام"}), 500
     return jsonify({"ok": True})
+
+
+@app.route("/api/file/<int:message_id>")
+@user_required
+def api_file(message_id):
+    """سرو فایل/عکس پیام (فقط برای فرستنده یا گیرنده)."""
+    uid = session["user_id"]
+    msg = db.get_message_by_id(message_id)
+    if not msg or (msg["sender_id"] != uid and msg["receiver_id"] != uid):
+        return jsonify({"error": "پیام یافت نشد"}), 404
+    full_path = config.UPLOAD_DIR / msg["file_path"]
+    if not full_path.exists():
+        return jsonify({"error": "فایل یافت نشد"}), 404
+    enc = full_path.read_bytes()
+    data = decrypt_bytes(enc)
+    if not data:
+        return jsonify({"error": "خطا در خواندن فایل"}), 500
+    mime = msg["mime_type"] or "application/octet-stream"
+    name = msg["file_name"] or "file"
+    return send_file(BytesIO(data), mimetype=mime, as_attachment=(msg["message_type"] == "file"), download_name=name)
 
 
 if __name__ == "__main__":

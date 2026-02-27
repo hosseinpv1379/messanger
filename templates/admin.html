@@ -43,7 +43,6 @@
     color: var(--text-soft);
 }
 .users-table tr:last-child td { border-bottom: none; }
-.users-table .id-cell { font-variant-numeric: tabular-nums; color: var(--accent); }
 .users-table .date-cell { color: var(--text-soft); font-size: 0.9rem; }
 @media (max-width: 500px) {
     .users-table th, .users-table td { padding: 0.6rem; font-size: 0.9rem; }
@@ -81,7 +80,6 @@
             <table class="users-table">
                 <thead>
                     <tr>
-                        <th>شناسه</th>
                         <th>نام کاربری</th>
                         <th>تاریخ ایجاد</th>
                     </tr>
@@ -89,15 +87,14 @@
                 <tbody>
                     {% for u in users %}
                     <tr>
-                        <td class="id-cell">{{ u.id }}</td>
-                        <td>{{ u.username }}</td>
+                        <td><strong>{{ u.username }}</strong></td>
                         <td class="date-cell">{{ u.created_at }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        <p style="margin-top: 1rem; color: var(--text-soft); font-size: 0.85rem;">شناسه را به کاربر بدهید تا با دیگران چت کند.</p>
+        <p style="margin-top: 1rem; color: var(--text-soft); font-size: 0.85rem;">این <strong>نام کاربری</strong> را به کاربر بدهید؛ دیگران با وارد کردن همین نام کاربری (مثل تلگرام) می‌توانند با او چت کنند.</p>
         {% else %}
         <p class="users-empty">هنوز کاربری ثبت نشده است. از فرم بالا کاربر اضافه کنید.</p>
         {% endif %}
