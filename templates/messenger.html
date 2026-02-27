@@ -3,6 +3,16 @@
 {% block extra_css %}
 /* تلگرام‌وار: رنگ اصلی */
 .messenger-page { --tg-accent: #2aabee; --tg-accent-dim: rgba(42, 171, 238, 0.15); }
+html.theme-light .messenger-page {
+    --tg-accent: #229ED9;
+    --tg-accent-dim: rgba(34, 158, 217, 0.18);
+}
+html.theme-light .chat-placeholder .history-item { background: rgba(255,255,255,0.7); }
+html.theme-light .chat-placeholder .history-item:hover,
+html.theme-light .chat-placeholder .history-item.active { background: var(--tg-accent-dim); }
+html.theme-light .chat-messages .msg.received { background: #fff; border-color: rgba(0,0,0,0.08); color: #0f172a; }
+html.theme-light .drawer-overlay .drawer { background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%); border-color: rgba(148, 163, 184, 0.4); }
+html.theme-light .pwa-install-banner { background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-color: rgba(148, 163, 184, 0.5); }
 .messenger-page {
     display: flex;
     flex-direction: column;
@@ -186,6 +196,27 @@
 }
 .settings-item:hover { background: rgba(51, 65, 85, 0.6); }
 .settings-item .icon { font-size: 1.2rem; margin-left: 0.5rem; }
+.settings-item-toggle { display: flex; align-items: center; justify-content: space-between; }
+.theme-switch { display: flex; gap: 0.25rem; }
+.theme-opt {
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background .2s, color .2s, border-color .2s;
+}
+.theme-opt:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.theme-opt.active { background: var(--tg-accent); color: #fff; border-color: var(--tg-accent); }
+.settings-item-static { flex-direction: column; align-items: flex-start; }
+.settings-item-static .icon { display: none; }
+.settings-item-static span { font-size: 0.85rem; color: var(--text-soft); line-height: 1.6; }
+.settings-version { font-size: 0.8rem; color: var(--text-soft); opacity: 0.8; padding-top: 0.5rem; }
+html.theme-light .theme-opt { border-color: rgba(100, 116, 139, 0.5); }
+html.theme-light .theme-opt:hover { background: rgba(0,0,0,0.06); }
+html.theme-light .theme-opt.active { background: var(--tg-accent); color: #fff; border-color: var(--tg-accent); }
 .settings-about {
     font-size: 0.9rem;
     color: var(--text-soft);
@@ -764,6 +795,13 @@
         <div class="settings-panel" id="settingsPanel">
             <h2>تنظیمات</h2>
             <div class="settings-group">
+                <div class="settings-item settings-item-toggle">
+                    <span>ظاهر</span>
+                    <div class="theme-switch">
+                        <button type="button" class="theme-opt active" id="themeDark" data-theme="dark">تاریک</button>
+                        <button type="button" class="theme-opt" id="themeLight" data-theme="light">روشن</button>
+                    </div>
+                </div>
                 <div class="settings-item">
                     <a href="{{ url_for('user_change_password') }}">تغییر رمز عبور</a>
                     <span class="icon">›</span>
@@ -775,6 +813,15 @@
             </div>
             <div class="settings-group">
                 <div class="settings-item">
+                    <span>حریم خصوصی</span>
+                    <span class="icon">›</span>
+                </div>
+                <div class="settings-item settings-item-static">
+                    <span>پیام‌ها فقط بین شما و طرف مقابل ذخیره می‌شوند. ادمین محتوای پیام‌ها را نمی‌بیند.</span>
+                </div>
+            </div>
+            <div class="settings-group">
+                <div class="settings-item">
                     <a href="{{ url_for('user_delete_account') }}">حذف حساب کاربری</a>
                     <span class="icon">›</span>
                 </div>
@@ -782,6 +829,7 @@
             <div class="settings-about">
                 مسنجر تحت وب — پیام‌ها رمزنگاری‌شده ذخیره می‌شوند.
             </div>
+            <div class="settings-version">نسخه ۱.۰</div>
         </div>
         <div class="chat-active" id="chatActive">
             <div class="chat-with" id="chatHeader">
@@ -936,6 +984,24 @@ const convoSearchBtn = document.getElementById('convoSearchBtn');
 const chatHeaderTitle = document.getElementById('chatHeaderTitle');
 const blockBtn = document.getElementById('blockBtn');
 const btnNotify = document.getElementById('btnNotify');
+const themeDark = document.getElementById('themeDark');
+const themeLight = document.getElementById('themeLight');
+const metaThemeColor = document.getElementById('metaThemeColor');
+
+function applyTheme(theme) {
+    var isLight = theme === 'light';
+    document.documentElement.classList.toggle('theme-light', isLight);
+    if (metaThemeColor) metaThemeColor.setAttribute('content', isLight ? '#f1f5f9' : '#0f172a');
+    if (themeDark) themeDark.classList.toggle('active', !isLight);
+    if (themeLight) themeLight.classList.toggle('active', isLight);
+}
+function initTheme() {
+    var t = localStorage.getItem('theme') || 'dark';
+    applyTheme(t);
+}
+if (themeDark) themeDark.addEventListener('click', function() { localStorage.setItem('theme', 'dark'); applyTheme('dark'); });
+if (themeLight) themeLight.addEventListener('click', function() { localStorage.setItem('theme', 'light'); applyTheme('light'); });
+initTheme();
 
 var viewMode = 'list';
 let currentOtherId = null;

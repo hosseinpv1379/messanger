@@ -3,8 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" id="metaThemeColor" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <script>
+        (function() {
+            var t = localStorage.getItem('theme');
+            if (t === 'light') document.documentElement.classList.add('theme-light');
+        })();
+    </script>
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="مسنجر">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -37,6 +43,26 @@
             --transition: 0.25s var(--ease);
             --card-bg: rgba(30, 41, 59, 0.88);
             --card-border: 1px solid rgba(71, 85, 105, 0.45);
+        }
+        html.theme-light {
+            --bg: #f1f5f9;
+            --bg-grad: linear-gradient(165deg, #e2e8f0 0%, #f1f5f9 50%, #f8fafc 100%);
+            --bg-soft: #e2e8f0;
+            --surface: #e2e8f0;
+            --surface-hover: #cbd5e1;
+            --border: rgba(100, 116, 139, 0.4);
+            --text: #0f172a;
+            --text-soft: #475569;
+            --accent: #0891b2;
+            --accent-hover: #0e7490;
+            --accent-glow: rgba(8, 145, 178, 0.25);
+            --accent-dim: rgba(8, 145, 178, 0.12);
+            --danger: #dc2626;
+            --success: #059669;
+            --shadow: 0 12px 48px rgba(0,0,0,0.12);
+            --shadow-sm: 0 2px 12px rgba(0,0,0,0.08);
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --card-border: 1px solid rgba(148, 163, 184, 0.4);
         }
         * { box-sizing: border-box; }
         html { -webkit-tap-highlight-color: transparent; scroll-behavior: smooth; }
