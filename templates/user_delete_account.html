@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}حذف حساب — مسنجر{% endblock %}
+{% block extra_css %}
+.page-card .danger-zone { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.page-card .danger-zone p { color: var(--text-soft); font-size: 0.9rem; margin-bottom: 1rem; }
+.page-card .btn-danger { background: var(--danger); color: #fff; }
+.page-card .btn-danger:hover { background: #dc2626; box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+.page-card .links { margin-top: 1rem; }
+.page-card .links a { font-size: 0.9rem; }
+{% endblock %}
+{% block body %}
+<div class="auth-page">
+    <div class="page-card">
+        <h1>حذف حساب کاربری</h1>
+        <p class="sub">با حذف حساب، همهٔ پیام‌ها و داده‌های شما برای همیشه پاک می‌شوند.</p>
+        {% if error %}
+        <p class="error" role="alert">{{ error }}</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('user_delete_account') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label for="password">رمز عبور (برای تأیید)</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password" maxlength="128" placeholder="رمز عبور">
+            <label for="confirm_text">برای تأیید عبارت <strong>حذف کن</strong> را دقیقاً وارد کنید</label>
+            <input type="text" id="confirm_text" name="confirm_text" required placeholder="حذف کن" autocomplete="off">
+            <div class="danger-zone">
+                <p>این عمل غیرقابل بازگشت است.</p>
+                <button type="submit" class="btn btn-danger btn-submit">حذف همیشگی حساب</button>
+            </div>
+        </form>
+        <div class="links">
+            <a href="{{ url_for('messenger') }}">← بازگشت به مسنجر</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -164,6 +164,29 @@ def user_verify(username: str, password: str) -> int | None:
         return row[0] if verify_password(password, row[1]) else None
 
 
+def user_verify_by_id(user_id: int, password: str) -> bool:
+    """بررسی رمز عبور با شناسهٔ کاربر (برای حذف حساب و غیره)."""
+    stored = _user_get_hash(user_id)
+    return bool(stored and verify_password(password, stored))
+
+
+def conversation_clear(user_id: int, other_id: int) -> bool:
+    """حذف همهٔ پیام‌های بین دو کاربر (گفتگو برای هر دو پاک می‌شود)."""
+    if user_id == other_id:
+        return False
+    with get_conn() as c:
+        c.execute(
+            """DELETE FROM messages WHERE
+               (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)""",
+            (user_id, other_id, other_id, user_id),
+        )
+        c.execute(
+            "DELETE FROM read_receipts WHERE (user_id = ? AND other_id = ?) OR (user_id = ? AND other_id = ?)",
+            (user_id, other_id, other_id, user_id),
+        )
+    return True
+
+
 def _user_get_hash(user_id: int) -> str | None:
     with get_conn() as c:
         row = c.execute(

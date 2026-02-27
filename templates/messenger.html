@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}مسنجر — {{ username }}{% endblock %}
 {% block extra_css %}
+/* تلگرام‌وار: رنگ اصلی */
+.messenger-page { --tg-accent: #2aabee; --tg-accent-dim: rgba(42, 171, 238, 0.15); }
 .messenger-page {
     display: flex;
     flex-direction: column;
@@ -219,18 +221,21 @@
 }
 .chat-placeholder .history-search input {
     flex: 1;
-    max-width: 220px;
     margin: 0;
     border-radius: var(--radius-pill);
-    padding: 0.55rem 1rem;
+    padding: 0.6rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
 }
 .chat-placeholder .history-list { list-style: none; margin: 0; padding: 0; }
 .chat-placeholder .history-item {
-    display: block;
-    padding: 1rem 1.25rem;
-    border-radius: 16px;
-    margin-bottom: 0.5rem;
-    background: rgba(51, 65, 85, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    margin-bottom: 0.35rem;
+    background: rgba(255,255,255,0.03);
     border: 1px solid transparent;
     cursor: pointer;
     text-align: right;
@@ -238,19 +243,73 @@
     animation: fadeIn 0.35s var(--ease) backwards;
 }
 .chat-placeholder .history-item:hover {
-    background: rgba(6, 182, 212, 0.12);
-    border-color: rgba(6, 182, 212, 0.3);
-    transform: translateX(-2px);
+    background: var(--tg-accent-dim);
+    border-color: rgba(42, 171, 238, 0.25);
 }
 .chat-placeholder .history-item.active {
-    background: rgba(6, 182, 212, 0.18);
-    border-color: rgba(6, 182, 212, 0.45);
-    box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.2);
+    background: var(--tg-accent-dim);
+    border-color: rgba(42, 171, 238, 0.4);
 }
 .chat-placeholder .history-item:active { transform: scale(0.99); }
-.chat-placeholder .history-item .h-username { font-weight: 700; margin-bottom: 0.25rem; font-size: 1rem; }
+.chat-placeholder .history-item .h-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--tg-accent), #229ED9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+}
+.chat-placeholder .history-item .h-body { flex: 1; min-width: 0; }
+.chat-placeholder .history-item .h-username { font-weight: 700; margin-bottom: 0.2rem; font-size: 1rem; }
 .chat-placeholder .history-item .h-preview { font-size: 0.85rem; color: var(--text-soft); line-height: 1.4; }
-.chat-placeholder .history-item .h-time { font-size: 0.75rem; color: var(--text-soft); margin-top: 0.35rem; opacity: 0.9; }
+.chat-placeholder .history-item .h-time { font-size: 0.75rem; color: var(--text-soft); margin-top: 0.25rem; opacity: 0.9; }
+.chat-placeholder .history-item .h-delete {
+    padding: 0.35rem;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-soft);
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity var(--transition), color var(--transition);
+}
+.chat-placeholder .history-item .h-delete:hover { opacity: 1; color: var(--danger); }
+.chat-search-in-chat {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(15, 23, 42, 0.5);
+    display: none;
+}
+.chat-search-in-chat.visible { display: block; }
+.chat-search-in-chat input {
+    width: 100%;
+    margin: 0;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.95rem;
+}
+.chat-with-actions { display: flex; align-items: center; gap: 0.35rem; }
+.chat-with-actions .btn-icon-small {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: background var(--transition);
+}
+.chat-with-actions .btn-icon-small:hover { background: rgba(255,255,255,0.15); }
 .chat-placeholder .history-empty {
     color: var(--text-soft);
     padding: 2.5rem 1rem;
@@ -271,12 +330,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.75rem 1.25rem;
+    padding: 0.75rem 1rem;
     border-bottom: 1px solid rgba(71, 85, 105, 0.35);
     font-weight: 700;
     font-size: 1rem;
-    background: rgba(15, 23, 42, 0.4);
+    background: rgba(15, 23, 42, 0.5);
 }
+.chat-with .chat-with-actions { display: flex; align-items: center; gap: 0.25rem; }
 .chat-with .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.8rem; border-radius: 10px; }
 .chat-messages {
     flex: 1;
@@ -311,10 +371,11 @@
 }
 .chat-messages .msg.sent {
     align-self: flex-end;
-    background: linear-gradient(135deg, var(--accent), #0891b2);
+    background: linear-gradient(135deg, var(--tg-accent), #229ED9);
     color: #fff;
     border-bottom-left-radius: 6px;
 }
+.chat-messages .msg.hidden-by-search { display: none !important; }
 .chat-messages .msg.received {
     align-self: flex-start;
     background: var(--surface);
@@ -680,6 +741,12 @@
                     <button type="button" class="btn btn-secondary btn-sm" id="btnNotifySettings">فعال‌سازی</button>
                 </div>
             </div>
+            <div class="settings-group">
+                <div class="settings-item">
+                    <a href="{{ url_for('user_delete_account') }}">حذف حساب کاربری</a>
+                    <span class="icon">›</span>
+                </div>
+            </div>
             <div class="settings-about">
                 مسنجر تحت وب — پیام‌ها رمزنگاری‌شده ذخیره می‌شوند.
             </div>
@@ -687,7 +754,14 @@
         <div class="chat-active" id="chatActive">
             <div class="chat-with" id="chatHeader">
                 <span id="chatHeaderTitle"></span>
-                <button type="button" class="btn btn-ghost btn-sm" id="blockBtn" style="display: none;">مسدود کردن</button>
+                <div class="chat-with-actions">
+                    <button type="button" class="btn-icon-small" id="chatSearchToggle" title="جستجو در چت">🔍</button>
+                    <button type="button" class="btn-icon-small" id="chatClearChatBtn" title="حذف گفتگو">🗑</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="blockBtn" style="display: none;">مسدود</button>
+                </div>
+            </div>
+            <div class="chat-search-in-chat" id="chatSearchInChat">
+                <input type="text" id="chatSearchInput" placeholder="جستجو در این گفتگو..." autocomplete="off">
             </div>
             <div class="chat-messages" id="chatMessages"></div>
             <!-- درخواست اجازهٔ میکروفون (یک‌بار نمایش) -->
@@ -781,6 +855,10 @@ const drawerSettings = document.getElementById('drawerSettings');
 const drawerConversations = document.getElementById('drawerConversations');
 const settingsPanel = document.getElementById('settingsPanel');
 const btnNotifySettings = document.getElementById('btnNotifySettings');
+const chatSearchToggle = document.getElementById('chatSearchToggle');
+const chatSearchInChat = document.getElementById('chatSearchInChat');
+const chatSearchInput = document.getElementById('chatSearchInput');
+const chatClearChatBtn = document.getElementById('chatClearChatBtn');
 const chatPlaceholder = document.getElementById('chatPlaceholder');
 const chatActive = document.getElementById('chatActive');
 const chatHeader = document.getElementById('chatHeader');
@@ -1171,16 +1249,40 @@ function loadConversations(q) {
                 var safePreview = escapeHtml(c.last_preview || '');
                 var safeTime = escapeHtml(c.last_at || '');
                 var isActive = (c.other_id === currentOtherId);
+                var initial = rawName.charAt(0).toUpperCase() || '?';
                 return '<li class="history-item' + (isActive ? ' active' : '') + '" data-id="' + c.other_id + '" data-name="' + safeName + '" style="animation-delay:' + (i * 0.03) + 's">' +
+                    '<div class="h-avatar">' + escapeHtml(initial) + '</div>' +
+                    '<div class="h-body">' +
                     '<div class="h-username">' + safeName + '</div>' +
                     '<div class="h-preview">' + safePreview + '</div>' +
-                    '<div class="h-time">' + safeTime + '</div></li>';
+                    '<div class="h-time">' + safeTime + '</div></div>' +
+                    '<button type="button" class="h-delete" data-id="' + c.other_id + '" title="حذف گفتگو">🗑</button></li>';
             }).join('');
             historyList.querySelectorAll('.history-item').forEach(function(el) {
-                el.addEventListener('click', function() {
-                    var id = parseInt(el.getAttribute('data-id'), 10);
+                var id = parseInt(el.getAttribute('data-id'), 10);
+                var name = el.getAttribute('data-name') || '';
+                el.querySelector('.h-delete').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (!confirm('همهٔ پیام‌های این گفتگو حذف شوند؟ (برای هر دو طرف)')) return;
+                    fetch('/api/conversation/' + id + '/clear', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                        body: JSON.stringify({ csrf_token: csrfToken })
+                    }).then(function(r) { return r.json(); }).then(function(res) {
+                        if (res.ok) {
+                            if (currentOtherId === id) {
+                                currentOtherId = null;
+                                currentOtherName = null;
+                                showView('list');
+                            }
+                            loadConversations();
+                            showToast('گفتگو حذف شد');
+                        } else { showToast(res.error || 'خطا'); }
+                    });
+                });
+                el.addEventListener('click', function(e) {
+                    if (e.target.closest('.h-delete')) return;
                     if (id !== id) return;
-                    var name = el.getAttribute('data-name') || '';
                     currentOtherId = id;
                     currentOtherName = name;
                     lastChatMessageCount = 0;
@@ -1461,8 +1563,46 @@ if (blockBtn) {
         }).then(function(r) { return r.json(); }).then(function(res) {
             if (res.ok) {
                 iBlockedThem = !iBlockedThem;
-                blockBtn.textContent = iBlockedThem ? 'رفع مسدودیت' : 'مسدود کردن';
+                blockBtn.textContent = iBlockedThem ? 'رفع مسدودیت' : 'مسدود';
                 showToast(iBlockedThem ? 'مسدود شد.' : 'رفع مسدودیت شد.');
+            } else { showToast(res.error || 'خطا'); }
+        });
+    });
+}
+
+if (chatSearchToggle && chatSearchInChat && chatSearchInput) {
+    chatSearchToggle.addEventListener('click', function() {
+        chatSearchInChat.classList.toggle('visible');
+        if (chatSearchInChat.classList.contains('visible')) {
+            chatSearchInput.value = '';
+            chatSearchInput.focus();
+            chatMessages.querySelectorAll('.msg').forEach(function(m) { m.classList.remove('hidden-by-search'); });
+        } else {
+            chatMessages.querySelectorAll('.msg').forEach(function(m) { m.classList.remove('hidden-by-search'); });
+        }
+    });
+    chatSearchInput.addEventListener('input', function() {
+        var q = chatSearchInput.value.trim().toLowerCase();
+        chatMessages.querySelectorAll('.msg').forEach(function(m) {
+            m.classList.toggle('hidden-by-search', q.length > 0 && m.textContent.toLowerCase().indexOf(q) === -1);
+        });
+    });
+}
+if (chatClearChatBtn) {
+    chatClearChatBtn.addEventListener('click', function() {
+        if (!currentOtherId) return;
+        if (!confirm('همهٔ پیام‌های این گفتگو برای همیشه حذف شوند؟ (برای هر دو طرف)')) return;
+        fetch('/api/conversation/' + currentOtherId + '/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ csrf_token: csrfToken })
+        }).then(function(r) { return r.json(); }).then(function(res) {
+            if (res.ok) {
+                currentOtherId = null;
+                currentOtherName = null;
+                showView('list');
+                loadConversations();
+                showToast('گفتگو حذف شد');
             } else { showToast(res.error || 'خطا'); }
         });
     });

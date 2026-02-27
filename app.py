@@ -350,6 +350,37 @@ def user_change_password():
     )
 
 
+@app.route("/user/delete-account", methods=["GET", "POST"])
+@user_required
+def user_delete_account():
+    """حذف حساب کاربری با تأیید رمز عبور."""
+    if request.method == "GET":
+        return render_template(
+            "user_delete_account.html",
+            csrf_token=security.csrf_token(session),
+        )
+    if not security.csrf_valid(session, request.form.get("csrf_token")):
+        return redirect(url_for("user_delete_account"))
+    uid = session["user_id"]
+    password = (request.form.get("password") or "")[: config.MAX_PASSWORD_LEN]
+    confirm = (request.form.get("confirm_text") or "").strip()
+    if confirm != "حذف کن":
+        return render_template(
+            "user_delete_account.html",
+            csrf_token=security.csrf_token(session),
+            error="برای تأیید عبارت «حذف کن» را دقیقاً وارد کنید.",
+        )
+    if not db.user_verify_by_id(uid, password):
+        return render_template(
+            "user_delete_account.html",
+            csrf_token=security.csrf_token(session),
+            error="رمز عبور اشتباه است.",
+        )
+    db.user_delete(uid)
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.route("/api/conversations")
 @user_required
 def api_conversations():
@@ -493,6 +524,21 @@ def api_delete_message(message_id):
     if db.message_delete(message_id, uid):
         return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "امکان حذف این پیام نیست"}), 400
+
+
+@app.route("/api/conversation/<int:other_id>/clear", methods=["POST"])
+@user_required
+def api_clear_conversation(other_id):
+    """حذف کامل گفتگو با یک کاربر (همهٔ پیام‌ها برای هر دو طرف)."""
+    uid = session["user_id"]
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
+        return jsonify({"ok": False, "error": "درخواست نامعتبر"}), 403
+    if other_id == uid:
+        return jsonify({"ok": False, "error": "نامعتبر"}), 400
+    if db.get_user_by_id(other_id) is None:
+        return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
+    db.conversation_clear(uid, other_id)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/block/<int:other_id>", methods=["POST", "DELETE"])
