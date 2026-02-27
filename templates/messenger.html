@@ -598,6 +598,22 @@ html.theme-light .contact-profile-modal { background: var(--tg-panel); box-shado
     box-shadow: 0 4px 20px rgba(0,0,0,0.35);
 }
 .call-in-progress-text { font-size: 14px; font-weight: 500; color: var(--tg-text); }
+.call-calling {
+    position: fixed;
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 340;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem 0.6rem 1.25rem;
+    background: var(--tg-panel);
+    border: 1px solid var(--tg-border);
+    border-radius: var(--radius-full);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+.call-calling-text { font-size: 14px; color: var(--tg-text-secondary); }
 .call-btn-hangup { background: #e53935; color: #fff; width: 40px; height: 40px; border-radius: 50%; padding: 0; font-size: 1.1rem; }
 .call-btn-hangup:hover { background: #c62828; }
 .call-permission-modal { max-width: 320px; }
@@ -1632,6 +1648,10 @@ html.theme-light .chat-messages {
             <button type="button" class="btn call-btn-accept" id="callAcceptBtn" title="پذیرش">📞</button>
         </div>
     </div>
+</div>
+<div class="call-calling" id="callCalling" style="display: none;">
+    <span class="call-calling-text" id="callCallingText">در حال تماس با …</span>
+    <button type="button" class="btn call-btn-hangup" id="callCallingCancelBtn" title="لغو">✕</button>
 </div>
 <div class="call-in-progress" id="callInProgress" style="display: none;">
     <span class="call-in-progress-text" id="callInProgressText">در تماس با …</span>
@@ -3226,6 +3246,10 @@ var callIncomingFromId = null;
 var callIncomingFromName = null;
 var callPendingOffer = null;
 var callIsCaller = false;
+var callIceQueue = [];
+var callCalling = document.getElementById('callCalling');
+var callCallingText = document.getElementById('callCallingText');
+var callCallingCancelBtn = document.getElementById('callCallingCancelBtn');
 var callPermissionOverlay = document.getElementById('callPermissionOverlay');
 var callPermissionAllowBtn = document.getElementById('callPermissionAllowBtn');
 var callPermissionCancelBtn = document.getElementById('callPermissionCancelBtn');
@@ -3287,6 +3311,14 @@ function sendCallSignal(toUserId, type, payload) {
         body: JSON.stringify({ to_user_id: toUserId, type: type, payload: payload || {} })
     }).then(function(r) { return r.json(); });
 }
+function flushIceQueue() {
+    if (!callPeerConnection || callPeerConnection.remoteDescription) return;
+    var pc = callPeerConnection;
+    while (callIceQueue.length) {
+        var c = callIceQueue.shift();
+        if (c && c.candidate) pc.addIceCandidate(new RTCIceCandidate(c)).catch(function() {});
+    }
+}
 function pollCallSignals() {
     fetch('/api/call/signals').then(function(r) { return r.json(); }).then(function(data) {
         var signals = (data && data.signals) || [];
@@ -3299,10 +3331,18 @@ function pollCallSignals() {
                 if (callIncomingName) callIncomingName.textContent = callIncomingFromName;
                 if (callIncomingOverlay) { callIncomingOverlay.classList.add('open'); callIncomingOverlay.setAttribute('aria-hidden', 'false'); }
             } else if (sig.type === 'answer' && callPeerConnection && callIsCaller) {
-                callPeerConnection.setRemoteDescription(new RTCSessionDescription(sig.payload)).catch(function() {});
+                var pc = callPeerConnection;
+                var answer = sig.payload && sig.payload.sdp ? sig.payload : { type: 'answer', sdp: (sig.payload && sig.payload.sdp) || '' };
+                pc.setRemoteDescription(new RTCSessionDescription(answer)).then(function() { flushIceQueue(); }).catch(function() {});
             } else if (sig.type === 'ice' && callPeerConnection) {
-                if (sig.payload.candidate)
-                    callPeerConnection.addIceCandidate(new RTCIceCandidate(sig.payload)).catch(function() {});
+                var p = sig.payload;
+                if (p && p.candidate) {
+                    if (!callPeerConnection.remoteDescription) {
+                        callIceQueue.push(p);
+                    } else {
+                        callPeerConnection.addIceCandidate(new RTCIceCandidate(p)).catch(function() {});
+                    }
+                }
             } else if (sig.type === 'hangup') {
                 endCall();
             }
@@ -3319,10 +3359,12 @@ function endCall() {
     callIncomingFromId = null;
     callIncomingFromName = null;
     callIsCaller = false;
+    callIceQueue = [];
     if (callInProgress) callInProgress.style.display = 'none';
+    if (callCalling) callCalling.style.display = 'none';
     if (callIncomingOverlay) { callIncomingOverlay.classList.remove('open'); callIncomingOverlay.setAttribute('aria-hidden', 'true'); }
     hideCallPermissionModal();
-    if (remoteAudio) remoteAudio.srcObject = null;
+    if (remoteAudio) { remoteAudio.srcObject = null; remoteAudio.pause(); }
 }
 function proceedOutgoingCall(stream) {
     if (!stream || !callOtherId || !callPeerConnection) return;
@@ -3332,10 +3374,13 @@ function proceedOutgoingCall(stream) {
     pc.createOffer().then(function(offer) {
         return pc.setLocalDescription(offer);
     }).then(function() {
-        return sendCallSignal(callOtherId, 'offer', { sdp: pc.localDescription, username: (typeof username !== 'undefined' ? username : '') });
+        var desc = pc.localDescription;
+return sendCallSignal(callOtherId, 'offer', { type: desc.type, sdp: desc.sdp, username: (typeof username !== 'undefined' ? username : '') });
     }).then(function(res) {
         if (!res.ok) { endCall(); showToast(res.error || 'خطا'); return; }
-        callSignalsInterval = setInterval(pollCallSignals, 1500);
+        if (callCallingText) callCallingText.textContent = 'در حال تماس با ' + (callOtherName || '') + '…';
+        if (callCalling) callCalling.style.display = 'flex';
+        callSignalsInterval = setInterval(pollCallSignals, 1200);
         pollCallSignals();
     }).catch(function() {
         endCall();
@@ -3354,13 +3399,20 @@ function startOutgoingCall() {
     var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     callPeerConnection = pc;
     pc.onicecandidate = function(e) {
-        if (e.candidate && callOtherId) sendCallSignal(callOtherId, 'ice', e.candidate);
+        if (e.candidate && callOtherId) {
+            var c = { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid || null, sdpMLineIndex: e.candidate.sdpMLineIndex };
+            sendCallSignal(callOtherId, 'ice', c);
+        }
     };
     pc.ontrack = function(e) {
-        if (remoteAudio) remoteAudio.srcObject = e.streams[0];
+        if (remoteAudio && e.streams && e.streams[0]) {
+            remoteAudio.srcObject = e.streams[0];
+            remoteAudio.play().catch(function() {});
+        }
     };
     pc.onconnectionstatechange = function() {
         if (pc.connectionState === 'connected') {
+            if (callCalling) callCalling.style.display = 'none';
             if (callInProgressText) callInProgressText.textContent = 'در تماس با ' + (callOtherName || '');
             if (callInProgress) callInProgress.style.display = 'flex';
         } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
@@ -3381,7 +3433,8 @@ function proceedAcceptCall(stream) {
     pc.createAnswer().then(function(answer) {
         return pc.setLocalDescription(answer);
     }).then(function() {
-        return sendCallSignal(callOtherId, 'answer', pc.localDescription);
+        var ansDesc = pc.localDescription;
+        return sendCallSignal(callOtherId, 'answer', { type: ansDesc.type, sdp: ansDesc.sdp });
     }).then(function(res) {
         if (!res.ok) { endCall(); return; }
         callSignalsInterval = setInterval(pollCallSignals, 1500);
@@ -3394,7 +3447,7 @@ function proceedAcceptCall(stream) {
 }
 function acceptIncomingCall() {
     if (!callPendingOffer || !callIncomingFromId) return;
-    var offerSdp = callPendingOffer.sdp || callPendingOffer;
+    var offerSdp = (callPendingOffer.type && callPendingOffer.sdp) ? callPendingOffer : (callPendingOffer.sdp && typeof callPendingOffer.sdp === 'object') ? callPendingOffer.sdp : null;
     if (!offerSdp || !offerSdp.sdp) { endCall(); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showToast('تماس صوتی در این مرورگر پشتیبانی نمی‌شود.');
@@ -3407,10 +3460,16 @@ function acceptIncomingCall() {
     var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     callPeerConnection = pc;
     pc.onicecandidate = function(e) {
-        if (e.candidate && callOtherId) sendCallSignal(callOtherId, 'ice', e.candidate);
+        if (e.candidate && callOtherId) {
+            var c = { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid || null, sdpMLineIndex: e.candidate.sdpMLineIndex };
+            sendCallSignal(callOtherId, 'ice', c);
+        }
     };
     pc.ontrack = function(e) {
-        if (remoteAudio) remoteAudio.srcObject = e.streams[0];
+        if (remoteAudio && e.streams && e.streams[0]) {
+            remoteAudio.srcObject = e.streams[0];
+            remoteAudio.play().catch(function() {});
+        }
     };
     pc.onconnectionstatechange = function() {
         if (pc.connectionState === 'connected') {
@@ -3421,6 +3480,7 @@ function acceptIncomingCall() {
         }
     };
     pc.setRemoteDescription(new RTCSessionDescription(offerSdp)).then(function() {
+        flushIceQueue();
         requestMicThen(function(stream) {
             if (!stream) return;
             hideCallPermissionModal();
@@ -3464,6 +3524,7 @@ if (callRejectBtn) callRejectBtn.addEventListener('click', function() {
 });
 if (callAcceptBtn) callAcceptBtn.addEventListener('click', acceptIncomingCall);
 if (callHangupBtn) callHangupBtn.addEventListener('click', endCall);
+if (callCallingCancelBtn) callCallingCancelBtn.addEventListener('click', endCall);
 setInterval(pollCallSignals, 2500);
 
 if (chatViewProfileBtn) {
