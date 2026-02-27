@@ -95,6 +95,9 @@ def _migrate_extra(c):
     cols = [row[1] for row in cur.fetchall()]
     if "is_banned" not in cols:
         c.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0")
+    for col, defn in [("display_name", "TEXT"), ("bio", "TEXT"), ("avatar_path", "TEXT")]:
+        if col not in cols:
+            c.execute(f"ALTER TABLE users ADD COLUMN {col} {defn}")
     # گروه‌ها
     c.execute("""
         CREATE TABLE IF NOT EXISTS groups (
@@ -270,6 +273,69 @@ def user_update_password(user_id: int, current_password: str, new_password: str)
             "UPDATE users SET password_hash = ? WHERE id = ?",
             (hash_password(new_password), user_id),
         )
+    return True, ""
+
+
+def user_get_profile(user_id: int) -> dict | None:
+    """پروفایل کاربر برای نمایش/ویرایش (username, display_name, bio, avatar_path)."""
+    u = get_user_by_id(user_id)
+    if not u:
+        return None
+    return {
+        "id": u["id"],
+        "username": u.get("username") or "",
+        "display_name": (u.get("display_name") or "").strip() or None,
+        "bio": (u.get("bio") or "").strip() or None,
+        "avatar_path": u.get("avatar_path") or None,
+    }
+
+
+def user_update_profile(
+    user_id: int,
+    display_name: str | None = None,
+    bio: str | None = None,
+    avatar_path: str | None = None,
+) -> bool:
+    """به‌روزرسانی نمایش‌نام، بیو یا مسیر آواتار. None یعنی تغییر نده."""
+    import config
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(users)")
+        cols = [r[1] for r in cur.fetchall()]
+        updates = []
+        params = []
+        if "display_name" in cols and display_name is not None:
+            val = (display_name or "").strip()[: getattr(config, "MAX_DISPLAY_NAME_LEN", 128)]
+            updates.append("display_name = ?")
+            params.append(val or None)
+        if "bio" in cols and bio is not None:
+            val = (bio or "").strip()[: getattr(config, "MAX_BIO_LEN", 500)]
+            updates.append("bio = ?")
+            params.append(val or None)
+        if "avatar_path" in cols and avatar_path is not None:
+            updates.append("avatar_path = ?")
+            params.append(avatar_path.strip() if avatar_path else None)
+        if not updates:
+            return True
+        params.append(user_id)
+        c.execute("UPDATE users SET " + ", ".join(updates) + " WHERE id = ?", params)
+    return True
+
+
+def user_update_username(user_id: int, new_username: str) -> tuple[bool, str]:
+    """تغییر نام کاربری. موفق: (True, '')، ناموفق: (False, پیام خطا)."""
+    import config
+    new_username = (new_username or "").strip()
+    if not new_username:
+        return False, "نام کاربری خالی است."
+    if len(new_username) < 2:
+        return False, "نام کاربری حداقل ۲ کاراکتر باشد."
+    if len(new_username) > config.MAX_USERNAME_LEN:
+        return False, f"نام کاربری حداکثر {config.MAX_USERNAME_LEN} کاراکتر."
+    with get_conn() as c:
+        existing = c.execute("SELECT id FROM users WHERE username = ? AND id != ?", (new_username, user_id)).fetchone()
+        if existing:
+            return False, "این نام کاربری قبلاً استفاده شده است."
+        c.execute("UPDATE users SET username = ? WHERE id = ?", (new_username, user_id))
     return True, ""
 
 
@@ -505,15 +571,34 @@ def get_user_by_id(uid: int) -> dict | None:
     with get_conn() as c:
         cur = c.execute("PRAGMA table_info(users)")
         cols = [r[1] for r in cur.fetchall()]
+        sel_cols = ["id", "username"]
         if "is_banned" in cols:
-            row = c.execute("SELECT id, username, is_banned FROM users WHERE id = ?", (uid,)).fetchone()
-            if not row:
-                return None
-            return {"id": row[0], "username": row[1], "is_banned": bool(row[2])}
-        row = c.execute("SELECT id, username FROM users WHERE id = ?", (uid,)).fetchone()
+            sel_cols.append("is_banned")
+        if "display_name" in cols:
+            sel_cols.append("display_name")
+        if "bio" in cols:
+            sel_cols.append("bio")
+        if "avatar_path" in cols:
+            sel_cols.append("avatar_path")
+        row = c.execute(
+            "SELECT " + ", ".join(sel_cols) + " FROM users WHERE id = ?", (uid,)
+        ).fetchone()
         if not row:
             return None
-        return {"id": row[0], "username": row[1], "is_banned": False}
+        out = {"id": row[0], "username": row[1], "is_banned": False}
+        i = 2
+        if "is_banned" in cols:
+            out["is_banned"] = bool(row[i])
+            i += 1
+        if "display_name" in cols and i < len(row):
+            out["display_name"] = row[i]
+            i += 1
+        if "bio" in cols and i < len(row):
+            out["bio"] = row[i]
+            i += 1
+        if "avatar_path" in cols and i < len(row):
+            out["avatar_path"] = row[i]
+        return out
 
 
 def get_user_by_username(username: str) -> dict | None:

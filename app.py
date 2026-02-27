@@ -410,6 +410,96 @@ def api_conversations():
     return jsonify(convos)
 
 
+@app.route("/api/me", methods=["GET", "PATCH"])
+@user_required
+def api_me():
+    """دریافت یا به‌روزرسانی پروفایل (display_name, bio)."""
+    uid = session["user_id"]
+    if request.method == "GET":
+        profile = db.user_get_profile(uid)
+        if not profile:
+            return jsonify({"error": "کاربر یافت نشد"}), 404
+        profile["avatar_url"] = url_for("api_avatar", user_id=uid) if profile.get("avatar_path") else None
+        return jsonify(profile)
+    # PATCH
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
+        return jsonify({"ok": False, "error": "CSRF نامعتبر"}), 403
+    data = request.get_json() or {}
+    display_name = data.get("display_name")
+    bio = data.get("bio")
+    if display_name is not None:
+        display_name = (display_name or "").strip()[: config.MAX_DISPLAY_NAME_LEN] or None
+    if bio is not None:
+        bio = (bio or "").strip()[: config.MAX_BIO_LEN] or None
+    db.user_update_profile(uid, display_name=display_name, bio=bio)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/me/username", methods=["POST"])
+@user_required
+def api_me_username():
+    """تغییر نام کاربری."""
+    uid = session["user_id"]
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
+        return jsonify({"ok": False, "error": "CSRF نامعتبر"}), 403
+    data = request.get_json() or {}
+    new_username = (data.get("username") or "").strip()
+    ok, msg = db.user_update_username(uid, new_username)
+    if not ok:
+        return jsonify({"ok": False, "error": msg}), 400
+    session["username"] = new_username
+    return jsonify({"ok": True, "username": new_username})
+
+
+@app.route("/api/me/avatar", methods=["POST"])
+@user_required
+def api_me_avatar():
+    """آپلود آواتار (یک فایل تصویر)."""
+    uid = session["user_id"]
+    if not security.csrf_valid(session, request.headers.get("X-CSRF-Token")):
+        return jsonify({"ok": False, "error": "CSRF نامعتبر"}), 403
+    f = request.files.get("avatar") or request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"ok": False, "error": "فایلی انتخاب نشده"}), 400
+    ext = Path(f.filename).suffix.lower()
+    if ext not in config.ALLOWED_IMAGE_EXTENSIONS:
+        return jsonify({"ok": False, "error": "فرمت تصویر مجاز نیست (jpg, png, gif, webp)"}), 400
+    content = f.read()
+    if len(content) > config.MAX_IMAGE_SIZE:
+        return jsonify({"ok": False, "error": "حجم تصویر بیش از حد مجاز است"}), 400
+    avatars_dir = config.UPLOAD_DIR / "avatars"
+    avatars_dir.mkdir(parents=True, exist_ok=True)
+    rel = f"avatars/{uid}{ext}"
+    path = config.UPLOAD_DIR / rel
+    path.write_bytes(content)
+    db.user_update_profile(uid, avatar_path=rel)
+    return jsonify({"ok": True, "avatar_url": url_for("api_avatar", user_id=uid)})
+
+
+def _mime_for_avatar(path: str) -> str:
+    p = (path or "").lower()
+    if p.endswith(".png"):
+        return "image/png"
+    if p.endswith(".gif"):
+        return "image/gif"
+    if p.endswith(".webp"):
+        return "image/webp"
+    return "image/jpeg"
+
+
+@app.route("/api/avatar/<int:user_id>")
+@user_required
+def api_avatar(user_id):
+    """سرو آواتار کاربر (برای نمایش در پروفایل و چت)."""
+    u = db.get_user_by_id(user_id)
+    if not u or not u.get("avatar_path"):
+        return "", 404
+    full = config.UPLOAD_DIR / u["avatar_path"]
+    if not full.is_file():
+        return "", 404
+    return send_file(full, mimetype=_mime_for_avatar(u["avatar_path"]), download_name="avatar")
+
+
 @app.route("/api/me/keys", methods=["PUT", "POST"])
 @user_required
 def api_me_keys():

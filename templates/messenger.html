@@ -58,6 +58,19 @@ html.theme-light .messenger-page { --tg-accent: var(--tg-blue-hover); --tg-accen
 @media (max-width: 767px) {
     .tg-sidebar.hidden-mobile { display: none !important; }
     .tg-main.hidden-mobile { display: none !important; }
+    .tg-sidebar { max-width: 100%; width: 100%; }
+    .tg-app { height: 100vh; height: 100dvh; }
+    .tg-chat-list .history-item { min-height: 52px; padding: 0.75rem 1rem; }
+    .tg-icon-btn { min-width: 44px; min-height: 44px; }
+    .tg-chat-header .back-btn { min-width: 48px; min-height: 48px; font-size: 1.5rem; }
+    .chat-form input, .chat-form textarea, .tg-search-input, .drawer-new-chat input { font-size: 16px !important; }
+    .chat-form, .composer-attachment-strip { padding-left: max(0.75rem, env(safe-area-inset-left)); padding-right: max(0.75rem, env(safe-area-inset-right)); }
+    .tg-sidebar-header, .tg-chat-header { padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right)); }
+    .drawer { width: min(100%, 320px); max-width: 100%; padding-bottom: env(safe-area-inset-bottom); }
+    .settings-panel, .profile-panel { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+    .btn, .drawer-new-chat .btn { min-height: 48px; padding: 0.75rem 1.25rem; }
+    .msg-actions .msg-btn { min-height: 36px; padding: 0.4rem 0.6rem; }
+    -webkit-tap-highlight-color: transparent;
 }
 .tg-sidebar-header {
     display: flex;
@@ -307,10 +320,49 @@ html.theme-light .messenger-page { --tg-accent: var(--tg-blue-hover); --tg-accen
     animation: fadeIn 0.3s var(--ease);
 }
 .settings-panel.visible { display: flex; }
-.settings-panel h2 {
+.settings-panel h2, .profile-panel h2 {
     margin: 0 0 1.25rem 0;
     font-size: 1.35rem;
 }
+.profile-panel {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 1.25rem;
+    animation: fadeIn 0.3s var(--ease);
+}
+.profile-panel.visible { display: flex; }
+.profile-view { text-align: center; }
+.profile-avatar-wrap {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 1rem;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--tg-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+    color: var(--tg-text-secondary);
+}
+.profile-avatar-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.profile-display-name { font-size: 1.25rem; font-weight: 700; margin: 0 0 0.25rem; color: var(--tg-text); }
+.profile-username { font-size: 0.9rem; color: var(--tg-text-secondary); margin: 0 0 1rem; }
+.profile-bio { font-size: 0.95rem; color: var(--tg-text-secondary); line-height: 1.6; margin: 0 0 1.5rem; white-space: pre-wrap; max-width: 360px; margin-left: auto; margin-right: auto; }
+.profile-edit-form { display: none; }
+.profile-panel.edit-mode .profile-view { display: none; }
+.profile-panel.edit-mode .profile-edit-form { display: block; }
+.profile-edit-form label { display: block; margin-bottom: 0.35rem; font-size: 0.9rem; color: var(--tg-text-secondary); }
+.profile-edit-form input, .profile-edit-form textarea { width: 100%; margin-bottom: 1rem; border-radius: 12px; padding: 0.75rem 1rem; background: var(--tg-input-bg); border: 1px solid var(--tg-border); color: var(--tg-text); font-size: 1rem; }
+.profile-edit-form textarea { min-height: 80px; resize: vertical; }
+.profile-avatar-upload { margin-bottom: 1rem; }
+.profile-avatar-upload img { max-width: 96px; max-height: 96px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 0.5rem; }
+.profile-actions { display: flex; gap: 0.75rem; margin-top: 1rem; flex-wrap: wrap; justify-content: center; }
+.settings-username-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+.settings-username-row input { flex: 1; min-width: 120px; margin: 0; }
 .settings-group {
     margin-bottom: 1.5rem;
 }
@@ -1112,9 +1164,45 @@ html.theme-light .chat-messages {
                 <p class="tg-welcome-desc">برای شروع یک گفتگو را از لیست انتخاب کنید یا از منو گفتگوی جدید بسازید.</p>
             </div>
         </div>
+        <div class="profile-panel" id="profilePanel">
+            <h2>پروفایل</h2>
+            <div class="profile-view" id="profileView">
+                <div class="profile-avatar-wrap" id="profileAvatarWrap">
+                    <img id="profileAvatarImg" alt="" style="display: none;">
+                    <span id="profileAvatarLetter">?</span>
+                </div>
+                <p class="profile-display-name" id="profileDisplayName">—</p>
+                <p class="profile-username" id="profileUsername">@</p>
+                <p class="profile-bio" id="profileBio"></p>
+                <button type="button" class="btn" id="profileEditBtn">ویرایش پروفایل</button>
+            </div>
+            <div class="profile-edit-form" id="profileEditForm">
+                <div class="profile-avatar-upload">
+                    <img id="profileEditAvatarPreview" alt="" style="display: none;">
+                    <label>عکس پروفایل</label>
+                    <input type="file" id="profileAvatarInput" accept="image/jpeg,image/png,image/gif,image/webp">
+                </div>
+                <label for="profileEditDisplayName">نام نمایشی</label>
+                <input type="text" id="profileEditDisplayName" placeholder="نام نمایشی" maxlength="128">
+                <label for="profileEditBio">دربارهٔ من</label>
+                <textarea id="profileEditBio" placeholder="یک خط دربارهٔ خودتان (اختیاری)" maxlength="500"></textarea>
+                <div class="profile-actions">
+                    <button type="button" class="btn" id="profileSaveBtn">ذخیره</button>
+                    <button type="button" class="btn btn-secondary" id="profileCancelBtn">انصراف</button>
+                </div>
+            </div>
+        </div>
         <div class="settings-panel" id="settingsPanel">
             <h2>تنظیمات</h2>
             <div class="settings-group">
+                <div class="settings-item" style="flex-direction: column; align-items: stretch;">
+                    <span>تغییر نام کاربری</span>
+                    <div class="settings-username-row">
+                        <input type="text" id="settingsUsernameInput" placeholder="نام کاربری" dir="ltr" maxlength="64" autocomplete="username">
+                        <button type="button" class="btn btn-sm" id="settingsUsernameBtn">تغییر</button>
+                    </div>
+                    <span class="open-error" id="settingsUsernameError" style="display: none;"></span>
+                </div>
                 <div class="settings-item settings-item-toggle">
                     <span>ظاهر</span>
                     <div class="theme-switch">
@@ -1258,6 +1346,10 @@ html.theme-light .chat-messages {
         </div>
         <div class="drawer-section-title">منو</div>
         <div class="drawer-body">
+            <button type="button" class="drawer-item" id="drawerProfile">
+                <span class="icon">👤</span>
+                <span>پروفایل</span>
+            </button>
             <button type="button" class="drawer-item" id="drawerConversations">
                 <span class="icon">💬</span>
                 <span>گفتگوها</span>
@@ -1574,7 +1666,7 @@ var tgSidebar = document.getElementById('tgSidebar');
 var tgMain = document.getElementById('tgMain');
 function showView(mode) {
     viewMode = mode;
-    if (tgSidebar) tgSidebar.classList.toggle('hidden-mobile', mode === 'chat' || mode === 'group');
+    if (tgSidebar) tgSidebar.classList.toggle('hidden-mobile', mode === 'chat' || mode === 'group' || mode === 'profile' || mode === 'settings');
     if (tgMain) tgMain.classList.toggle('has-chat', mode === 'chat' || mode === 'group');
     if (chatPlaceholder) chatPlaceholder.style.display = (mode === 'list') ? 'flex' : 'none';
     if (chatActive) {
@@ -1590,15 +1682,30 @@ function showView(mode) {
         if (mode === 'settings') {
             settingsPanel.classList.add('visible');
             settingsPanel.style.display = 'flex';
+            if (settingsUsernameInput) settingsUsernameInput.value = (typeof username !== 'undefined' ? username : '') || '';
+            if (settingsUsernameError) { settingsUsernameError.style.display = 'none'; settingsUsernameError.textContent = ''; }
         } else {
             settingsPanel.classList.remove('visible');
             settingsPanel.style.display = 'none';
         }
     }
-    if (backBtn) backBtn.classList.toggle('visible', mode === 'chat' || mode === 'settings' || mode === 'group');
+    var profilePanel = document.getElementById('profilePanel');
+    if (profilePanel) {
+        if (mode === 'profile') {
+            profilePanel.classList.add('visible');
+            profilePanel.style.display = 'flex';
+            profilePanel.classList.remove('edit-mode');
+            loadProfile();
+        } else {
+            profilePanel.classList.remove('visible');
+            profilePanel.style.display = 'none';
+        }
+    }
+    if (backBtn) backBtn.classList.toggle('visible', mode === 'chat' || mode === 'settings' || mode === 'profile' || mode === 'group');
     if (headerTitle) {
         if (mode === 'list') headerTitle.textContent = 'مسنجر';
         else if (mode === 'settings') headerTitle.textContent = 'تنظیمات';
+        else if (mode === 'profile') headerTitle.textContent = 'پروفایل';
         else if (mode === 'chat' && currentOtherName) headerTitle.textContent = currentOtherName;
         else if (mode === 'group' && currentGroupName) headerTitle.textContent = currentGroupName;
     }
@@ -2163,6 +2270,57 @@ if (drawerOverlay) {
         if (e.target === drawerOverlay) closeDrawer();
     });
 }
+var profilePanel = document.getElementById('profilePanel');
+var profileAvatarWrap = document.getElementById('profileAvatarWrap');
+var profileAvatarImg = document.getElementById('profileAvatarImg');
+var profileAvatarLetter = document.getElementById('profileAvatarLetter');
+var profileDisplayName = document.getElementById('profileDisplayName');
+var profileUsername = document.getElementById('profileUsername');
+var profileBio = document.getElementById('profileBio');
+var profileEditBtn = document.getElementById('profileEditBtn');
+var profileEditForm = document.getElementById('profileEditForm');
+var profileEditDisplayName = document.getElementById('profileEditDisplayName');
+var profileEditBio = document.getElementById('profileEditBio');
+var profileSaveBtn = document.getElementById('profileSaveBtn');
+var profileCancelBtn = document.getElementById('profileCancelBtn');
+var profileAvatarInput = document.getElementById('profileAvatarInput');
+var profileEditAvatarPreview = document.getElementById('profileEditAvatarPreview');
+var settingsUsernameInput = document.getElementById('settingsUsernameInput');
+var settingsUsernameBtn = document.getElementById('settingsUsernameBtn');
+var settingsUsernameError = document.getElementById('settingsUsernameError');
+
+function loadProfile() {
+    fetch('/api/me').then(function(r) { return r.json(); }).then(function(p) {
+        if (p.error) return;
+        var name = (p.display_name || p.username || '').trim() || p.username || '—';
+        var letter = (name.charAt(0) || '?').toUpperCase();
+        if (profileDisplayName) profileDisplayName.textContent = name;
+        if (profileUsername) profileUsername.textContent = '@' + (p.username || '');
+        if (profileBio) { profileBio.textContent = (p.bio || '').trim() || ''; profileBio.style.display = (p.bio && p.bio.trim()) ? 'block' : 'none'; }
+        if (profileAvatarImg && profileAvatarLetter) {
+            if (p.avatar_url) {
+                profileAvatarImg.src = p.avatar_url + '?t=' + Date.now();
+                profileAvatarImg.style.display = 'block';
+                profileAvatarLetter.style.display = 'none';
+            } else {
+                profileAvatarImg.removeAttribute('src');
+                profileAvatarImg.style.display = 'none';
+                profileAvatarLetter.textContent = letter;
+                profileAvatarLetter.style.display = '';
+            }
+        }
+        if (profileEditDisplayName) profileEditDisplayName.value = (p.display_name || '').trim();
+        if (profileEditBio) profileEditBio.value = (p.bio || '').trim();
+        if (profileEditAvatarPreview) { profileEditAvatarPreview.removeAttribute('src'); profileEditAvatarPreview.style.display = 'none'; }
+        if (profileAvatarInput) profileAvatarInput.value = '';
+    });
+}
+
+var drawerProfileEl = document.getElementById('drawerProfile');
+if (drawerProfileEl) drawerProfileEl.addEventListener('click', function() {
+    closeDrawer();
+    showView('profile');
+});
 if (drawerConversations) {
     drawerConversations.addEventListener('click', function() {
         closeDrawer();
@@ -2173,9 +2331,79 @@ if (drawerSettings) {
     drawerSettings.addEventListener('click', function() {
         closeDrawer();
         showView('settings');
+        if (settingsUsernameInput) settingsUsernameInput.value = (typeof username !== 'undefined' ? username : '') || '';
+        if (settingsUsernameError) { settingsUsernameError.style.display = 'none'; settingsUsernameError.textContent = ''; }
         if (btnNotifySettings && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             btnNotifySettings.textContent = 'فعال';
         }
+    });
+}
+if (profileEditBtn) profileEditBtn.addEventListener('click', function() {
+    if (profilePanel) profilePanel.classList.add('edit-mode');
+});
+if (profileCancelBtn) profileCancelBtn.addEventListener('click', function() {
+    if (profilePanel) profilePanel.classList.remove('edit-mode');
+});
+if (profileAvatarInput) profileAvatarInput.addEventListener('change', function() {
+    var f = this.files[0];
+    if (!f || !f.type.match(/^image\//)) return;
+    var url = URL.createObjectURL(f);
+    if (profileEditAvatarPreview) {
+        profileEditAvatarPreview.src = url;
+        profileEditAvatarPreview.style.display = 'block';
+    }
+});
+if (profileSaveBtn) profileSaveBtn.addEventListener('click', function() {
+    var displayName = (profileEditDisplayName && profileEditDisplayName.value) ? profileEditDisplayName.value.trim() : '';
+    var bio = (profileEditBio && profileEditBio.value) ? profileEditBio.value.trim() : '';
+    var fd = new FormData();
+    fd.append('avatar', profileAvatarInput && profileAvatarInput.files[0] ? profileAvatarInput.files[0] : '');
+    profileSaveBtn.disabled = true;
+    function done() { profileSaveBtn.disabled = false; if (profilePanel) profilePanel.classList.remove('edit-mode'); loadProfile(); }
+    var hasAvatar = profileAvatarInput && profileAvatarInput.files[0];
+    if (hasAvatar) {
+        fd.append('csrf_token', csrfToken);
+        fetch('/api/me/avatar', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (!res.ok) { showToast(res.error || 'خطا'); profileSaveBtn.disabled = false; return; }
+                fetch('/api/me', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                    body: JSON.stringify({ display_name: displayName, bio: bio })
+                }).then(function(r2) { return r2.json(); }).then(function() { showToast('ذخیره شد'); done(); });
+            });
+    } else {
+        fetch('/api/me', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ display_name: displayName, bio: bio })
+        }).then(function(r) { return r.json(); }).then(function(res) {
+            if (res.error) { showToast(res.error || 'خطا'); profileSaveBtn.disabled = false; return; }
+            showToast('ذخیره شد');
+            done();
+        });
+    }
+});
+if (settingsUsernameBtn && settingsUsernameInput) {
+    settingsUsernameBtn.addEventListener('click', function() {
+        var newUsername = settingsUsernameInput.value.trim();
+        if (!newUsername) { if (settingsUsernameError) { settingsUsernameError.textContent = 'نام کاربری را وارد کنید.'; settingsUsernameError.style.display = 'block'; } return; }
+        if (settingsUsernameError) { settingsUsernameError.style.display = 'none'; settingsUsernameError.textContent = ''; }
+        settingsUsernameBtn.disabled = true;
+        fetch('/api/me/username', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: JSON.stringify({ username: newUsername })
+        }).then(function(r) { return r.json(); }).then(function(res) {
+            settingsUsernameBtn.disabled = false;
+            if (res.ok) {
+                showToast('نام کاربری تغییر کرد.');
+                if (typeof document !== 'undefined' && document.title) document.title = 'مسنجر — ' + (res.username || newUsername);
+            } else {
+                if (settingsUsernameError) { settingsUsernameError.textContent = res.error || 'خطا'; settingsUsernameError.style.display = 'block'; }
+            }
+        });
     });
 }
 
