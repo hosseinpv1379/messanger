@@ -40,27 +40,156 @@
 }
 .msg-header .back-btn:hover { background: var(--accent-dim); color: var(--accent); }
 .msg-header .back-btn.visible { display: inline-flex; }
+.msg-header .hamburger-btn {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 12px;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: background var(--transition);
+}
+.msg-header .hamburger-btn:hover { background: var(--accent-dim); }
+.msg-header .hamburger-btn.hidden { display: none !important; }
 .msg-header .title { flex: 1; font-weight: 700; font-size: 1.05rem; letter-spacing: -0.02em; }
 .msg-header .header-link { font-size: 0.85rem; padding: 0.5rem 0.9rem; text-decoration: none; border-radius: 10px; }
-.open-chat-bar {
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid rgba(71, 85, 105, 0.35);
-    display: flex;
-    gap: 0.6rem;
-    align-items: center;
-    flex-wrap: wrap;
-    background: rgba(15, 23, 42, 0.3);
-}
-.open-chat-bar label { margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--text-soft); }
-.open-chat-bar input[type="text"] {
-    width: 160px;
-    max-width: 200px;
-    margin: 0;
-    border-radius: var(--radius-pill);
-    padding: 0.5rem 1rem;
-}
-.open-chat-bar .open-error { color: var(--danger); width: 100%; font-size: 0.85rem; margin-top: 0.35rem; }
+.msg-header .header-actions { display: flex; align-items: center; gap: 0.35rem; }
 .chat-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+/* ——— منوی همبرگری (دراور) ——— */
+.drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s var(--ease), visibility 0.25s var(--ease);
+}
+.drawer-overlay.open {
+    opacity: 1;
+    visibility: visible;
+}
+.drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(300px, 85vw);
+    max-width: 300px;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.99) 100%);
+    box-shadow: -8px 0 32px rgba(0,0,0,0.4);
+    z-index: 201;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.3s var(--ease);
+    border-left: 1px solid rgba(71, 85, 105, 0.4);
+}
+.drawer-overlay.open .drawer {
+    transform: translateX(0);
+}
+.drawer-header {
+    padding: 1.25rem 1.25rem 1rem;
+    border-bottom: 1px solid rgba(71, 85, 105, 0.35);
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+.drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.75rem 0;
+}
+.drawer-item {
+    display: block;
+    width: 100%;
+    padding: 0.9rem 1.25rem;
+    text-align: right;
+    border: none;
+    background: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background var(--transition);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.drawer-item:hover { background: rgba(6, 182, 212, 0.12); }
+.drawer-item .icon { font-size: 1.25rem; }
+.drawer-section-title {
+    padding: 0.6rem 1.25rem 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.drawer-new-chat {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+}
+.drawer-new-chat label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-soft); }
+.drawer-new-chat input {
+    width: 100%;
+    margin: 0 0 0.5rem 0;
+    border-radius: var(--radius-sm);
+    padding: 0.6rem 1rem;
+    box-sizing: border-box;
+}
+.drawer-new-chat .open-error { color: var(--danger); font-size: 0.85rem; margin-top: 0.25rem; }
+.drawer-new-chat .btn { width: 100%; margin-top: 0.25rem; }
+
+/* ——— صفحه تنظیمات (درون مسنجر) ——— */
+.settings-panel {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 1.25rem;
+    animation: fadeIn 0.3s var(--ease);
+}
+.settings-panel.visible { display: flex; }
+.settings-panel h2 {
+    margin: 0 0 1.25rem 0;
+    font-size: 1.35rem;
+}
+.settings-group {
+    margin-bottom: 1.5rem;
+}
+.settings-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    background: rgba(51, 65, 85, 0.4);
+    border-radius: 14px;
+    margin-bottom: 0.5rem;
+    border: 1px solid transparent;
+    transition: background var(--transition);
+}
+.settings-item a {
+    color: inherit;
+    text-decoration: none;
+    flex: 1;
+}
+.settings-item:hover { background: rgba(51, 65, 85, 0.6); }
+.settings-item .icon { font-size: 1.2rem; margin-left: 0.5rem; }
+.settings-about {
+    font-size: 0.9rem;
+    color: var(--text-soft);
+    line-height: 1.7;
+    padding: 1rem 0;
+}
 .chat-placeholder {
     flex: 1;
     display: flex;
@@ -515,30 +644,39 @@
 {% block body %}
 <div class="messenger-page container">
     <header class="msg-header">
+        <button type="button" class="btn btn-ghost hamburger-btn" id="hamburgerBtn" aria-label="منو">☰</button>
         <button type="button" class="btn btn-ghost back-btn" id="backBtn" aria-label="بازگشت">←</button>
-        <span class="title" id="headerTitle">مسنجر — {{ username }}</span>
-        <button type="button" class="btn btn-ghost header-link" id="btnNotify" title="نوتیفیکیشن پیام‌ها">🔔</button>
-        <a href="{{ url_for('user_change_password') }}" class="btn btn-ghost header-link" title="تغییر رمز عبور">تغییر رمز</a>
-        <a href="{{ url_for('logout') }}" class="btn btn-ghost header-link" title="خروج از حساب">خروج</a>
+        <span class="title" id="headerTitle">مسنجر</span>
+        <div class="header-actions" id="headerActions"></div>
     </header>
-    <div class="open-chat-bar">
-        <label for="otherUsername">نام کاربری:</label>
-        <input type="text" id="otherUsername" placeholder="مثال: ali" autocomplete="off" dir="ltr" style="text-align: left;">
-        <button type="button" class="btn" id="btnOpenChat">باز کردن چت</button>
-        <span class="open-error" id="openError"></span>
-    </div>
     <div class="chat-body">
         <div class="chat-placeholder" id="chatPlaceholder">
             <div class="history-section">
-                <div class="history-title">گفتگوهای اخیر</div>
+                <div class="history-title">گفتگوها</div>
                 <div class="history-search">
                     <input type="text" id="convoSearch" placeholder="جستجو در گفتگوها..." autocomplete="off">
                     <button type="button" class="btn btn-secondary" id="convoSearchBtn">جستجو</button>
                 </div>
                 <ul class="history-list" id="historyList"></ul>
                 <div class="history-empty" id="historyEmpty" style="display: none;">
-                    هنوز گفتگویی ندارید. نام کاربری طرف را پایین وارد کنید و چت جدید باز کنید.
+                    گفتگویی ندارید. از منو «گفتگوی جدید» را بزنید.
                 </div>
+            </div>
+        </div>
+        <div class="settings-panel" id="settingsPanel">
+            <h2>تنظیمات</h2>
+            <div class="settings-group">
+                <div class="settings-item">
+                    <a href="{{ url_for('user_change_password') }}">تغییر رمز عبور</a>
+                    <span class="icon">›</span>
+                </div>
+                <div class="settings-item">
+                    <span>نوتیفیکیشن پیام‌ها</span>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnNotifySettings">فعال‌سازی</button>
+                </div>
+            </div>
+            <div class="settings-about">
+                مسنجر تحت وب — پیام‌ها رمزنگاری‌شده ذخیره می‌شوند.
             </div>
         </div>
         <div class="chat-active" id="chatActive">
@@ -592,6 +730,32 @@
         </div>
     </div>
 </div>
+<div class="drawer-overlay" id="drawerOverlay">
+    <div class="drawer">
+        <div class="drawer-header">منو</div>
+        <div class="drawer-new-chat">
+            <label for="drawerUsername">گفتگوی جدید</label>
+            <input type="text" id="drawerUsername" placeholder="نام کاربری طرف" autocomplete="off" dir="ltr" style="text-align: left;">
+            <button type="button" class="btn" id="drawerOpenChat">باز کردن چت</button>
+            <span class="open-error" id="drawerOpenError"></span>
+        </div>
+        <div class="drawer-section-title">منو</div>
+        <div class="drawer-body">
+            <button type="button" class="drawer-item" id="drawerConversations">
+                <span class="icon">💬</span>
+                <span>گفتگوها</span>
+            </button>
+            <button type="button" class="drawer-item" id="drawerSettings">
+                <span class="icon">⚙</span>
+                <span>تنظیمات</span>
+            </button>
+            <a href="{{ url_for('logout') }}" class="drawer-item">
+                <span class="icon">⎋</span>
+                <span>خروج</span>
+            </a>
+        </div>
+    </div>
+</div>
 <div class="toast" id="toast" role="alert"></div>
 {% endblock %}
 {% block extra_js %}
@@ -602,9 +766,16 @@ const csrfToken = {{ csrf_token | tojson }};
 
 const backBtn = document.getElementById('backBtn');
 const headerTitle = document.getElementById('headerTitle');
-const otherUsernameInput = document.getElementById('otherUsername');
-const btnOpenChat = document.getElementById('btnOpenChat');
-const openError = document.getElementById('openError');
+const headerActions = document.getElementById('headerActions');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const drawerOverlay = document.getElementById('drawerOverlay');
+const drawerUsername = document.getElementById('drawerUsername');
+const drawerOpenChat = document.getElementById('drawerOpenChat');
+const drawerOpenError = document.getElementById('drawerOpenError');
+const drawerSettings = document.getElementById('drawerSettings');
+const drawerConversations = document.getElementById('drawerConversations');
+const settingsPanel = document.getElementById('settingsPanel');
+const btnNotifySettings = document.getElementById('btnNotifySettings');
 const chatPlaceholder = document.getElementById('chatPlaceholder');
 const chatActive = document.getElementById('chatActive');
 const chatHeader = document.getElementById('chatHeader');
@@ -638,6 +809,7 @@ const chatHeaderTitle = document.getElementById('chatHeaderTitle');
 const blockBtn = document.getElementById('blockBtn');
 const btnNotify = document.getElementById('btnNotify');
 
+var viewMode = 'list';
 let currentOtherId = null;
 let currentOtherName = null;
 let selectedFile = null;
@@ -669,7 +841,47 @@ function startChatPoll() {
 }
 
 function showOpenError(msg) {
-    openError.textContent = msg || '';
+    if (drawerOpenError) drawerOpenError.textContent = msg || '';
+}
+function openDrawer() {
+    if (drawerOverlay) drawerOverlay.classList.add('open');
+}
+function closeDrawer() {
+    if (drawerOverlay) drawerOverlay.classList.remove('open');
+}
+function showView(mode) {
+    viewMode = mode;
+    if (chatPlaceholder) chatPlaceholder.style.display = (mode === 'list') ? 'flex' : 'none';
+    if (chatActive) {
+        if (mode === 'chat') {
+            chatActive.classList.add('visible');
+            chatActive.style.display = 'flex';
+        } else {
+            chatActive.classList.remove('visible');
+            chatActive.style.display = 'none';
+        }
+    }
+    if (settingsPanel) {
+        if (mode === 'settings') {
+            settingsPanel.classList.add('visible');
+            settingsPanel.style.display = 'flex';
+        } else {
+            settingsPanel.classList.remove('visible');
+            settingsPanel.style.display = 'none';
+        }
+    }
+    if (hamburgerBtn) {
+        hamburgerBtn.classList.toggle('hidden', mode === 'chat');
+    }
+    if (backBtn) {
+        backBtn.classList.toggle('visible', mode === 'chat' || mode === 'settings');
+    }
+    if (headerTitle) {
+        if (mode === 'list') headerTitle.textContent = 'مسنجر';
+        else if (mode === 'settings') headerTitle.textContent = 'تنظیمات';
+        else if (mode === 'chat' && currentOtherName) headerTitle.textContent = currentOtherName;
+    }
+    if (headerActions) headerActions.innerHTML = '';
 }
 
 function showToast(msg) {
@@ -679,9 +891,11 @@ function showToast(msg) {
 }
 
 function setLoading(loading) {
-    btnOpenChat.disabled = loading;
-    if (loading) btnOpenChat.classList.add('loading');
-    else btnOpenChat.classList.remove('loading');
+    if (drawerOpenChat) {
+        drawerOpenChat.disabled = loading;
+        if (loading) drawerOpenChat.classList.add('loading');
+        else drawerOpenChat.classList.remove('loading');
+    }
 }
 
 function escapeHtml(s) {
@@ -965,11 +1179,8 @@ function loadConversations(q) {
                     currentOtherName = name;
                     lastChatMessageCount = 0;
                     lastChatLastId = 0;
-                    chatPlaceholder.style.display = 'none';
-                    chatActive.classList.add('visible');
-                    if (chatHeaderTitle) chatHeaderTitle.textContent = 'گفتگو با ' + name;
-                    backBtn.classList.add('visible');
-                    headerTitle.textContent = name;
+                    showView('chat');
+                    if (chatHeaderTitle) chatHeaderTitle.textContent = name;
                     loadChat();
                     updateMicPermissionCard();
                 });
@@ -988,55 +1199,92 @@ if (convoSearchBtn && convoSearch) {
 }
 
 backBtn.addEventListener('click', function() {
-    stopChatPoll();
-    if (isVoiceRecording) stopVoiceRecording();
-    hideVoicePreview();
-    chatActive.classList.remove('visible');
-    chatPlaceholder.style.display = 'flex';
-    headerTitle.textContent = 'مسنجر — ' + username;
-    backBtn.classList.remove('visible');
-    currentOtherId = null;
-    currentOtherName = null;
-    lastChatMessageCount = 0;
-    lastChatLastId = 0;
-    selectedFile = null;
-    filePreview.textContent = '';
-    fileInput.value = '';
-    showOpenError('');
+    if (viewMode === 'chat') {
+        stopChatPoll();
+        if (isVoiceRecording) stopVoiceRecording();
+        hideVoicePreview();
+        currentOtherId = null;
+        currentOtherName = null;
+        lastChatMessageCount = 0;
+        lastChatLastId = 0;
+        selectedFile = null;
+        filePreview.textContent = '';
+        if (fileInput) fileInput.value = '';
+        showOpenError('');
+    }
+    showView('list');
     loadConversations();
 });
 
-btnOpenChat.addEventListener('click', async function() {
-    const raw = otherUsernameInput.value.trim();
-    showOpenError('');
-    if (!raw) {
-        showOpenError('نام کاربری را وارد کنید.');
-        return;
-    }
-    setLoading(true);
-    try {
-        const r = await fetch('/api/user-by-username/' + encodeURIComponent(raw));
-        const data = await r.json();
-        if (r.status === 404 || r.status === 400 || data.error) {
-            showOpenError(data.error || 'کاربر یافت نشد.');
+if (drawerOpenChat) {
+    drawerOpenChat.addEventListener('click', async function() {
+        var raw = (drawerUsername && drawerUsername.value) ? drawerUsername.value.trim() : '';
+        showOpenError('');
+        if (!raw) {
+            showOpenError('نام کاربری را وارد کنید.');
             return;
         }
-        currentOtherId = data.id;
-        currentOtherName = data.username;
-        lastChatMessageCount = 0;
-        lastChatLastId = 0;
-        chatPlaceholder.style.display = 'none';
-        chatActive.classList.add('visible');
-        if (chatHeaderTitle) chatHeaderTitle.textContent = 'گفتگو با ' + currentOtherName;
-        backBtn.classList.add('visible');
-        headerTitle.textContent = currentOtherName;
-        loadChat();
-        loadConversations();
-        updateMicPermissionCard();
-    } finally {
-        setLoading(false);
-    }
-});
+        setLoading(true);
+        try {
+            var r = await fetch('/api/user-by-username/' + encodeURIComponent(raw));
+            var data = await r.json();
+            if (r.status === 404 || r.status === 400 || data.error) {
+                showOpenError(data.error || 'کاربر یافت نشد.');
+                return;
+            }
+            currentOtherId = data.id;
+            currentOtherName = data.username;
+            lastChatMessageCount = 0;
+            lastChatLastId = 0;
+            closeDrawer();
+            showView('chat');
+            if (chatHeaderTitle) chatHeaderTitle.textContent = currentOtherName;
+            loadChat();
+            loadConversations();
+            updateMicPermissionCard();
+            if (drawerUsername) drawerUsername.value = '';
+        } finally {
+            setLoading(false);
+        }
+    });
+}
+if (hamburgerBtn) hamburgerBtn.addEventListener('click', openDrawer);
+if (drawerOverlay) {
+    drawerOverlay.addEventListener('click', function(e) {
+        if (e.target === drawerOverlay) closeDrawer();
+    });
+}
+if (drawerConversations) {
+    drawerConversations.addEventListener('click', function() {
+        closeDrawer();
+        showView('list');
+    });
+}
+if (drawerSettings) {
+    drawerSettings.addEventListener('click', function() {
+        closeDrawer();
+        showView('settings');
+        if (btnNotifySettings && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            btnNotifySettings.textContent = 'فعال';
+        }
+    });
+}
+if (btnNotifySettings) {
+    btnNotifySettings.addEventListener('click', function() {
+        if (typeof Notification === 'undefined') {
+            showToast('نوتیفیکیشن در این مرورگر پشتیبانی نمیشه');
+            return;
+        }
+        if (Notification.permission === 'granted') {
+            showToast('نوتیفیکیشن فعال است');
+            return;
+        }
+        Notification.requestPermission().then(function(p) {
+            if (p === 'granted') { showToast('نوتیفیکیشن فعال شد'); btnNotifySettings.textContent = 'فعال'; }
+            else if (p === 'denied') showToast('اجازه نوتیفیکیشن داده نشد');
+        });
+    });
+}
 
 function initVoiceBubbles() {
     if (!chatMessages) return;
@@ -1237,6 +1485,7 @@ if (btnNotify) {
     });
 }
 
+showView('list');
 loadConversations();
 
 chatForm.addEventListener('submit', async function(e) {
