@@ -201,6 +201,7 @@
                     هنوز گفتگویی ندارید. نام کاربری طرف را پایین وارد کنید و چت جدید باز کنید.
                 </div>
             </div>
+        </div>
         <div class="chat-active" id="chatActive">
             <div class="chat-with" id="chatHeader"></div>
             <div class="chat-messages" id="chatMessages"></div>
@@ -278,23 +279,27 @@ function loadConversations() {
     fetch('/api/conversations')
         .then(function(r) { return r.json(); })
         .then(function(list) {
-            if (!list || list.length === 0) {
+            if (!Array.isArray(list) || list.length === 0) {
                 historyList.innerHTML = '';
                 historyEmpty.style.display = 'block';
                 return;
             }
             historyEmpty.style.display = 'none';
             historyList.innerHTML = list.map(function(c) {
-                var safeName = escapeHtml(c.other_username);
+                var rawName = (c.other_username != null) ? String(c.other_username) : '';
+                var safeName = escapeHtml(rawName);
+                var safePreview = escapeHtml(c.last_preview || '');
+                var safeTime = escapeHtml(c.last_at || '');
                 return '<li class="history-item" data-id="' + c.other_id + '" data-name="' + safeName + '">' +
                     '<div class="h-username">' + safeName + '</div>' +
-                    '<div class="h-preview">' + escapeHtml(c.last_preview) + '</div>' +
-                    '<div class="h-time">' + escapeHtml(c.last_at) + '</div></li>';
+                    '<div class="h-preview">' + safePreview + '</div>' +
+                    '<div class="h-time">' + safeTime + '</div></li>';
             }).join('');
             historyList.querySelectorAll('.history-item').forEach(function(el) {
                 el.addEventListener('click', function() {
                     var id = parseInt(el.getAttribute('data-id'), 10);
-                    var name = el.getAttribute('data-name');
+                    if (id !== id) return;
+                    var name = el.getAttribute('data-name') || '';
                     currentOtherId = id;
                     currentOtherName = name;
                     chatPlaceholder.style.display = 'none';
@@ -305,6 +310,11 @@ function loadConversations() {
                     loadChat();
                 });
             });
+        })
+        .catch(function() {
+            historyList.innerHTML = '';
+            historyEmpty.style.display = 'block';
+            historyEmpty.textContent = 'خطا در بارگذاری گفتگوها. دوباره تلاش کنید.';
         });
 }
 
