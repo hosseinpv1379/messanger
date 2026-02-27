@@ -702,6 +702,38 @@
     transform: translateX(-50%) translateY(0);
     opacity: 1;
 }
+/* بنر پیشنهاد نصب وب‌اپ (موبایل) */
+.pwa-install-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.9rem 1rem;
+    padding-bottom: max(0.9rem, env(safe-area-inset-bottom));
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-top: 1px solid rgba(71, 85, 105, 0.5);
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.3);
+    z-index: 150;
+    display: none;
+    align-items: center;
+    gap: 0.75rem;
+    animation: slideUpBanner 0.35s var(--ease);
+}
+.pwa-install-banner.visible { display: flex; flex-wrap: wrap; }
+@keyframes slideUpBanner {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.pwa-install-banner .pwa-install-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+.pwa-install-banner .pwa-install-text strong { display: block; margin-bottom: 0.2rem; }
+.pwa-install-banner .pwa-install-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.pwa-install-banner .pwa-install-actions .btn { padding: 0.5rem 1rem; font-size: 0.9rem; }
+.pwa-install-banner .pwa-dismiss { background: transparent; color: var(--text-soft); padding: 0.35rem; border: none; cursor: pointer; font-size: 1.1rem; }
 @media (max-width: 500px) {
     .messenger-page { border-radius: 0; max-height: none; }
     .chat-messages .msg { max-width: 90%; }
@@ -835,6 +867,16 @@
         </div>
     </div>
 </div>
+<div class="pwa-install-banner" id="pwaInstallBanner">
+    <div class="pwa-install-text">
+        <strong>مسنجر را نصب کنید</strong>
+        <span>برای دسترسی سریع‌تر و نوتیفیکیشن، اپ را روی صفحهٔ اصلی اضافه کنید.</span>
+    </div>
+    <div class="pwa-install-actions">
+        <button type="button" class="btn" id="pwaInstallBtn">نصب</button>
+        <button type="button" class="pwa-dismiss" id="pwaInstallDismiss" aria-label="بستن">×</button>
+    </div>
+</div>
 <div class="toast" id="toast" role="alert"></div>
 {% endblock %}
 {% block extra_js %}
@@ -860,6 +902,9 @@ const chatSearchInChat = document.getElementById('chatSearchInChat');
 const chatSearchInput = document.getElementById('chatSearchInput');
 const chatClearChatBtn = document.getElementById('chatClearChatBtn');
 const chatPlaceholder = document.getElementById('chatPlaceholder');
+const pwaInstallBanner = document.getElementById('pwaInstallBanner');
+const pwaInstallBtn = document.getElementById('pwaInstallBtn');
+const pwaInstallDismiss = document.getElementById('pwaInstallDismiss');
 const chatActive = document.getElementById('chatActive');
 const chatHeader = document.getElementById('chatHeader');
 const chatMessages = document.getElementById('chatMessages');
@@ -1631,6 +1676,57 @@ if (btnNotify) {
 
 showView('list');
 loadConversations();
+
+(function() {
+    var PWA_DISMISS_KEY = 'pwa_install_dismissed';
+    function isMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+            (window.innerWidth <= 768 && 'ontouchstart' in window);
+    }
+    function isStandalone() {
+        return window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: fullscreen)').matches ||
+            (window.navigator.standalone === true);
+    }
+    function shouldShowInstallBanner() {
+        return pwaInstallBanner && isMobile() && !isStandalone() && localStorage.getItem(PWA_DISMISS_KEY) !== '1';
+    }
+    var deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        deferredPrompt = e;
+    });
+    if (pwaInstallDismiss) {
+        pwaInstallDismiss.addEventListener('click', function() {
+            localStorage.setItem(PWA_DISMISS_KEY, '1');
+            if (pwaInstallBanner) pwaInstallBanner.classList.remove('visible');
+        });
+    }
+    if (pwaInstallBtn) {
+        pwaInstallBtn.addEventListener('click', function() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(function(choice) {
+                    if (choice.outcome === 'accepted') {
+                        showToast('نصب شروع شد');
+                    }
+                    deferredPrompt = null;
+                });
+                if (pwaInstallBanner) pwaInstallBanner.classList.remove('visible');
+                localStorage.setItem(PWA_DISMISS_KEY, '1');
+            } else {
+                showToast('از منوی مرورگر (⋯ یا اشتراک‌گذاری) گزینه «افزودن به صفحهٔ اصلی» را بزنید.');
+            }
+        });
+    }
+    if (shouldShowInstallBanner()) {
+        setTimeout(function() {
+            if (pwaInstallBanner && localStorage.getItem(PWA_DISMISS_KEY) !== '1') {
+                pwaInstallBanner.classList.add('visible');
+            }
+        }, 2500);
+    }
+})();
 
 chatForm.addEventListener('submit', async function(e) {
     e.preventDefault();
