@@ -211,15 +211,15 @@ def admin_reset_user_password(user_id):
     new_pw = (request.form.get("new_password") or "")[: config.MAX_PASSWORD_LEN]
     ok, msg = db.admin_set_user_password(user_id, new_pw)
     if not ok:
-    return render_template(
-        "admin.html",
-        users=db.user_list(),
-        search=request.args.get("q", ""),
-        stats=_admin_stats(),
-        reset_error=msg,
-        reset_user_id=user_id,
-        csrf_token=security.csrf_token(session),
-    )
+        return render_template(
+            "admin.html",
+            users=db.user_list(),
+            search=request.args.get("q", ""),
+            stats=_admin_stats(),
+            reset_error=msg,
+            reset_user_id=user_id,
+            csrf_token=security.csrf_token(session),
+        )
     return redirect(url_for("admin_panel"))
 
 
