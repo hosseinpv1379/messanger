@@ -396,6 +396,36 @@ def api_conversations():
     return jsonify(convos)
 
 
+@app.route("/api/me/keys", methods=["PUT", "POST"])
+@user_required
+def api_me_keys():
+    """ثبت کلید عمومی کاربر برای رمزنگاری انتها‑به‑انتها (E2EE). کلید ۳۲ بایت Curve25519 به صورت base64."""
+    import base64
+    uid = session["user_id"]
+    data = request.get_json() or {}
+    b64 = data.get("public_key") or ""
+    try:
+        key_bytes = base64.decodebytes(b64.encode() if isinstance(b64, str) else b64)
+    except Exception:
+        return jsonify({"ok": False, "error": "فرمت کلید نامعتبر"}), 400
+    if len(key_bytes) != 32:
+        return jsonify({"ok": False, "error": "کلید باید ۳۲ بایت باشد"}), 400
+    if db.user_set_public_key(uid, key_bytes):
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "خطا در ذخیره"}), 500
+
+
+@app.route("/api/keys/<int:user_id>")
+@user_required
+def api_keys_get(user_id):
+    """دریافت کلید عمومی یک کاربر برای E2EE (برای رمزنگاری پیام برای او)."""
+    key = db.user_get_public_key(user_id)
+    if key is None:
+        return jsonify({"error": "کلید عمومی یافت نشد"}), 404
+    import base64
+    return jsonify({"public_key": base64.b64encode(key).decode()})
+
+
 @app.route("/api/user-by-username/<username>")
 @user_required
 def api_user_by_username(username):
@@ -420,7 +450,9 @@ def api_chat(other_id):
             if mid:
                 db.read_receipt_set(uid, other_id, int(mid))
         return jsonify({"ok": True})
-    messages = db.messages_for_user(uid, other_id)
+    messages = db.messages_for_user(uid, other_id, include_e2ee_raw=True)
+    sender_ids = list({m["sender_id"] for m in messages if m.get("is_e2ee")})
+    public_keys = db.get_public_keys_for_users(sender_ids) if sender_ids else {}
     other = db.get_user_by_id(other_id)
     if not other:
         return jsonify({"error": "کاربر یافت نشد"}), 404
@@ -429,6 +461,7 @@ def api_chat(other_id):
     return jsonify({
         "other": other,
         "messages": messages,
+        "public_keys": public_keys,
         "other_read_up_to": other_read_up_to,
         "i_blocked_them": i_blocked_them,
     })
@@ -499,9 +532,28 @@ def api_send():
             return jsonify({"ok": False, "error": "خطا در ذخیره پیام"}), 500
         return jsonify({"ok": True})
 
-    # ارسال متن ساده (JSON)
+    # ارسال متن ساده (JSON) — پشتیبانی از E2EE
     data = request.get_json() or {}
     receiver_id = data.get("receiver_id")
+    e2ee_ciphertext_b64 = data.get("e2ee_ciphertext")
+    if e2ee_ciphertext_b64:
+        # پیام E2EE: کلاینت رمزنگاری کرده؛ سرور فقط ذخیره می‌کند
+        import base64
+        if not receiver_id:
+            return jsonify({"ok": False, "error": "گیرنده مشخص نیست"}), 400
+        if receiver_id == uid:
+            return jsonify({"ok": False, "error": "نمی‌توانید به خودتان پیام بفرستید"}), 400
+        if db.get_user_by_id(receiver_id) is None:
+            return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
+        if db.is_blocked(receiver_id, uid):
+            return jsonify({"ok": False, "error": "شما توسط این کاربر مسدود شده‌اید"}), 403
+        try:
+            blob = base64.decodebytes((e2ee_ciphertext_b64 or "").encode() if isinstance(e2ee_ciphertext_b64, str) else e2ee_ciphertext_b64)
+        except Exception:
+            return jsonify({"ok": False, "error": "فرمت پیام رمزنگاری‌شده نامعتبر"}), 400
+        if not db.message_send(uid, receiver_id, "", body_e2ee_blob=blob):
+            return jsonify({"ok": False, "error": "خطا در ارسال پیام"}), 500
+        return jsonify({"ok": True})
     body = (data.get("body") or "").strip()
     if not body:
         return jsonify({"ok": False, "error": "متن پیام خالی است"}), 400

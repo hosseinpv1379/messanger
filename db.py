@@ -61,6 +61,7 @@ def _migrate_messages_media(c):
         ("file_name", "TEXT"),
         ("mime_type", "TEXT"),
         ("deleted_at", "TIMESTAMP"),
+        ("is_e2ee", "INTEGER DEFAULT 0"),
     ]:
         if col not in cols:
             c.execute(f"ALTER TABLE messages ADD COLUMN {col} {defn}")
@@ -129,6 +130,22 @@ def _migrate_extra(c):
             FOREIGN KEY (sender_id) REFERENCES users(id)
         )
     """)
+    _migrate_e2ee(c)
+
+
+def _migrate_e2ee(c):
+    """جدول کلید عمومی کاربران برای رمزنگاری انتها‑به‑انتها (E2EE)."""
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS user_public_keys (
+            user_id INTEGER PRIMARY KEY,
+            public_key BLOB NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    cur = c.execute("PRAGMA table_info(messages)")
+    if "is_e2ee" not in [row[1] for row in cur.fetchall()]:
+        c.execute("ALTER TABLE messages ADD COLUMN is_e2ee INTEGER DEFAULT 0")
 
 
 def hash_password(password: str) -> str:
@@ -304,6 +321,47 @@ def user_list(search: str = ""):
         return out
 
 
+def user_set_public_key(user_id: int, public_key: bytes) -> bool:
+    """ذخیرهٔ کلید عمومی کاربر برای E2EE. کلید باید ۳۲ بایت (Curve25519) باشد."""
+    if not public_key or len(public_key) != 32:
+        return False
+    with get_conn() as c:
+        c.execute(
+            """INSERT INTO user_public_keys (user_id, public_key, updated_at)
+               VALUES (?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(user_id) DO UPDATE SET public_key = excluded.public_key, updated_at = CURRENT_TIMESTAMP""",
+            (user_id, public_key),
+        )
+    return True
+
+
+def user_get_public_key(user_id: int) -> bytes | None:
+    """کلید عمومی کاربر برای E2EE (۳۲ بایت) یا None."""
+    with get_conn() as c:
+        row = c.execute(
+            "SELECT public_key FROM user_public_keys WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    return row[0] if row else None
+
+
+def get_public_keys_for_users(user_ids: list[int]) -> dict[int, str]:
+    """برگرداندن نقشه user_id -> base64(public_key) برای لیست کاربران."""
+    if not user_ids:
+        return {}
+    out = {}
+    with get_conn() as c:
+        for uid in user_ids:
+            row = c.execute(
+                "SELECT public_key FROM user_public_keys WHERE user_id = ?",
+                (uid,),
+            ).fetchone()
+            if row:
+                import base64
+                out[uid] = base64.encodebytes(row[0]).decode().strip()
+    return out
+
+
 def is_blocked(blocker_id: int, blocked_id: int) -> bool:
     with get_conn() as c:
         r = c.execute(
@@ -313,10 +371,18 @@ def is_blocked(blocker_id: int, blocked_id: int) -> bool:
         return r is not None
 
 
-def message_send(sender_id: int, receiver_id: int, body: str) -> bool:
+def message_send(sender_id: int, receiver_id: int, body: str, body_e2ee_blob: bytes | None = None) -> bool:
     import config
     if is_blocked(receiver_id, sender_id):
         return False
+    if body_e2ee_blob is not None:
+        # پیام E2EE: کلاینت قبلاً رمزنگاری کرده؛ سرور فقط ذخیره می‌کند (بدون دسترسی به متن اصلی)
+        with get_conn() as c:
+            c.execute(
+                "INSERT INTO messages (sender_id, receiver_id, body_encrypted, is_e2ee) VALUES (?, ?, ?, 1)",
+                (sender_id, receiver_id, body_e2ee_blob),
+            )
+        return True
     if not body or len(body) > config.MAX_MESSAGE_LEN:
         return False
     enc = encrypt_message(body)
@@ -330,50 +396,90 @@ def message_send(sender_id: int, receiver_id: int, body: str) -> bool:
     return True
 
 
-def messages_for_user(user_id: int, other_id: int | None = None):
-    """لیست مکالمات یا پیام‌های با یک کاربر خاص. پیام‌های حذف‌شده نشان داده نمی‌شوند."""
+def messages_for_user(user_id: int, other_id: int | None = None, include_e2ee_raw: bool = False):
+    """لیست مکالمات یا پیام‌های با یک کاربر خاص. پیام‌های حذف‌شده نشان داده نمی‌شوند.
+    اگر include_e2ee_raw=True و other_id مشخص باشد، پیام‌های E2EE به‌صورت body_e2ee (base64) برمی‌گردند
+    و سرور متن را رمزگشایی نمی‌کند."""
+    import base64
     with get_conn() as c:
         cur = c.execute("PRAGMA table_info(messages)")
         cols = [r[1] for r in cur.fetchall()]
+        has_e2ee = "is_e2ee" in cols
         deleted_clause = " AND (deleted_at IS NULL)" if "deleted_at" in cols else ""
         if other_id is not None:
-            rows = c.execute(
-                """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
-                          message_type, file_path, file_name, mime_type
-                   FROM messages
-                   WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
-                   """ + deleted_clause + """
-                   ORDER BY created_at""",
-                (user_id, other_id, other_id, user_id),
-            ).fetchall()
+            if has_e2ee:
+                rows = c.execute(
+                    """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
+                              message_type, file_path, file_name, mime_type, is_e2ee
+                       FROM messages
+                       WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+                       """ + deleted_clause + """
+                       ORDER BY created_at""",
+                    (user_id, other_id, other_id, user_id),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
+                              message_type, file_path, file_name, mime_type
+                       FROM messages
+                       WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+                       """ + deleted_clause + """
+                       ORDER BY created_at""",
+                    (user_id, other_id, other_id, user_id),
+                ).fetchall()
         else:
-            rows = c.execute(
-                """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
-                          message_type, file_path, file_name, mime_type
-                   FROM messages
-                   WHERE (sender_id = ? OR receiver_id = ?)
-                   """ + deleted_clause + """
-                   ORDER BY created_at DESC""",
-                (user_id, user_id),
-            ).fetchall()
+            if has_e2ee:
+                rows = c.execute(
+                    """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
+                              message_type, file_path, file_name, mime_type, is_e2ee
+                       FROM messages
+                       WHERE (sender_id = ? OR receiver_id = ?)
+                       """ + deleted_clause + """
+                       ORDER BY created_at DESC""",
+                    (user_id, user_id),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
+                              message_type, file_path, file_name, mime_type
+                       FROM messages
+                       WHERE (sender_id = ? OR receiver_id = ?)
+                       """ + deleted_clause + """
+                       ORDER BY created_at DESC""",
+                    (user_id, user_id),
+                ).fetchall()
     out = []
     for r in rows:
-        body = decrypt_message(r[3]) if r[3] else ""
-        if body is None:
-            body = "[پیام رمزنگاری‌شده قابل نمایش نیست]"
+        is_e2ee = bool(has_e2ee and len(r) > 9 and r[9])
+        body_e2ee = ""
+        if is_e2ee and include_e2ee_raw and other_id is not None and r[3]:
+            body = ""
+            body_e2ee = base64.encodebytes(r[3]).decode().strip()
+        else:
+            if is_e2ee:
+                body = "[پیام رمزنگاری‌شده — فقط در دستگاه شما و طرف مقابل قابل خواندن است]"
+            else:
+                body = decrypt_message(r[3]) if r[3] else ""
+                if body is None:
+                    body = "[پیام رمزنگاری‌شده قابل نمایش نیست]"
+                body = body.strip() if body and body != " " else ""
         msg_type = (r[5] if len(r) > 5 else None) or "text"
         file_path = r[6] if len(r) > 6 else None
         file_name = r[7] if len(r) > 7 else None
         mime_type = r[8] if len(r) > 8 else None
-        out.append({
+        item = {
             "id": r[0], "sender_id": r[1], "receiver_id": r[2],
-            "body": body.strip() if body and body != " " else "",
+            "body": body,
             "created_at": r[4],
             "message_type": msg_type,
             "file_path": file_path,
             "file_name": file_name or "",
             "mime_type": mime_type or "",
-        })
+        }
+        if body_e2ee:
+            item["body_e2ee"] = body_e2ee
+            item["is_e2ee"] = True
+        out.append(item)
     return out
 
 
@@ -410,7 +516,19 @@ def get_conversations(user_id: int, limit: int = 100, search: str = "") -> list[
         cur = c.execute("PRAGMA table_info(messages)")
         cols = [row[1] for row in cur.fetchall()]
         has_type = "message_type" in cols
-        if has_type:
+        has_e2ee = "is_e2ee" in cols
+        if has_type and has_e2ee:
+            rows = c.execute(
+                """SELECT
+                     CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END AS other_id,
+                     created_at, body_encrypted, message_type, is_e2ee
+                   FROM messages
+                   WHERE (sender_id = ? OR receiver_id = ?)
+                   ORDER BY created_at DESC
+                   LIMIT ?""",
+                (user_id, user_id, user_id, limit * 2),
+            ).fetchall()
+        elif has_type:
             rows = c.execute(
                 """SELECT
                      CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END AS other_id,
@@ -447,21 +565,25 @@ def get_conversations(user_id: int, limit: int = 100, search: str = "") -> list[
             continue
         if search_lower and search_lower not in (u.get("username") or "").lower():
             continue
-        body = decrypt_message(r[2]) if r[2] else ""
-        if body is None:
-            preview = "[پیام]"
+        is_e2ee = bool(has_e2ee and has_type and len(r) > 4 and r[4])
+        if is_e2ee:
+            preview = "🔒 پیام"
         else:
-            msg_type = (r[3] if has_type and len(r) > 3 else None) or "text"
-            if msg_type == "image":
-                preview = "📷 عکس"
-            elif msg_type == "file":
-                preview = "📎 فایل"
-            elif msg_type == "voice":
-                preview = "🎤 ویس"
+            body = decrypt_message(r[2]) if r[2] else ""
+            if body is None:
+                preview = "[پیام]"
             else:
-                preview = (body.strip() or " ")[:50]
-                if len((body or "").strip()) > 50:
-                    preview += "…"
+                msg_type = (r[3] if has_type and len(r) > 3 else None) or "text"
+                if msg_type == "image":
+                    preview = "📷 عکس"
+                elif msg_type == "file":
+                    preview = "📎 فایل"
+                elif msg_type == "voice":
+                    preview = "🎤 ویس"
+                else:
+                    preview = (body.strip() or " ")[:50]
+                    if len((body or "").strip()) > 50:
+                        preview += "…"
         out.append({
             "other_id": other_id,
             "other_username": u["username"],

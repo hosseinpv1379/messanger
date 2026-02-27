@@ -1058,7 +1058,7 @@ html.theme-light .pwa-install-banner {
                     <span class="icon">›</span>
                 </div>
                 <div class="settings-item settings-item-static">
-                    <span>پیام‌ها فقط بین شما و طرف مقابل ذخیره می‌شوند. ادمین محتوای پیام‌ها را نمی‌بیند.</span>
+                    <span>پیام‌های چت دو نفره با رمزنگاری انتها‑به‑انتها (E2EE) ذخیره می‌شوند؛ سرور و ادمین محتوای آن‌ها را نمی‌بینند (مشابه چت مخفی تلگرام).</span>
                 </div>
             </div>
             <div class="settings-group">
@@ -1068,7 +1068,7 @@ html.theme-light .pwa-install-banner {
                 </div>
             </div>
             <div class="settings-about">
-                مسنجر تحت وب — پیام‌ها رمزنگاری‌شده ذخیره می‌شوند.
+                مسنجر تحت وب — چت دو نفره با رمزنگاری انتها‑به‑انتها (E2EE).
             </div>
             <div class="settings-version">نسخه ۱.۰</div>
         </div>
@@ -1213,6 +1213,7 @@ html.theme-light .pwa-install-banner {
 <div class="toast" id="toast" role="alert"></div>
 {% endblock %}
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/tweet-nacl@1.0.3/nacl.min.js"></script>
 <script>
 const userId = {{ user_id | default(0) }};
 const username = {{ username | tojson }};
@@ -1327,6 +1328,104 @@ initTheme();
 
 var viewMode = 'list';
 let currentOtherId = null;
+
+// ——— E2EE (رمزنگاری انتها‑به‑انتها مثل تلگرام) ———
+var otherPublicKeyByUserId = {};
+function b64ToUint8(b64) {
+    try {
+        var binary = atob(b64.replace(/\s/g, ''));
+        var u8 = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) u8[i] = binary.charCodeAt(i);
+        return u8;
+    } catch (e) { return null; }
+}
+function uint8ToB64(u8) {
+    var binary = '';
+    for (var i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
+    return btoa(binary);
+}
+function getE2EEKeyPair() {
+    if (typeof nacl === 'undefined') return null;
+    try {
+        var pk = sessionStorage.getItem('e2ee_public');
+        var sk = sessionStorage.getItem('e2ee_secret');
+        if (pk && sk) {
+            var pub = b64ToUint8(pk);
+            var sec = b64ToUint8(sk);
+            if (pub && pub.length === 32 && sec && sec.length === 32)
+                return { publicKey: pub, secretKey: sec };
+        }
+        var kp = nacl.box.keyPair();
+        sessionStorage.setItem('e2ee_public', uint8ToB64(kp.publicKey));
+        sessionStorage.setItem('e2ee_secret', uint8ToB64(kp.secretKey));
+        return kp;
+    } catch (e) { return null; }
+}
+function uploadE2EEPublicKey() {
+    var kp = getE2EEKeyPair();
+    if (!kp) return;
+    fetch('/api/me/keys', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: JSON.stringify({ public_key: uint8ToB64(kp.publicKey) })
+    }).catch(function() {});
+}
+function fetchOtherPublicKey(otherId, cb) {
+    if (otherPublicKeyByUserId[otherId]) { if (cb) cb(otherPublicKeyByUserId[otherId]); return; }
+    fetch('/api/keys/' + otherId).then(function(r) {
+        if (!r.ok) { if (cb) cb(null); return; }
+        return r.json();
+    }).then(function(data) {
+        if (data && data.public_key) {
+            var u8 = b64ToUint8(data.public_key);
+            if (u8 && u8.length === 32) { otherPublicKeyByUserId[otherId] = u8; if (cb) cb(u8); return; }
+        }
+        if (cb) cb(null);
+    }).catch(function() { if (cb) cb(null); });
+}
+function decryptE2eeBody(bodyE2eeB64, senderPublicKeyB64) {
+    if (typeof nacl === 'undefined' || !bodyE2eeB64) return null;
+    var kp = getE2EEKeyPair();
+    if (!kp) return null;
+    var data = b64ToUint8(bodyE2eeB64);
+    if (!data || data.length < 24 + 16) return null;
+    var nonce = data.slice(0, 24);
+    var box = data.slice(24);
+    var senderPub = b64ToUint8(senderPublicKeyB64);
+    if (!senderPub || senderPub.length !== 32) return null;
+    try {
+        var out = nacl.box.open(box, nonce, senderPub, kp.secretKey);
+        return out ? new TextDecoder().decode(out) : null;
+    } catch (e) { return null; }
+}
+function encryptE2eeBody(plaintext, recipientPublicKey) {
+    if (typeof nacl === 'undefined' || !recipientPublicKey) return null;
+    var kp = getE2EEKeyPair();
+    if (!kp) return null;
+    var nonce = nacl.randomBytes(24);
+    var msg = new TextEncoder().encode(plaintext);
+    var box = nacl.box(msg, nonce, recipientPublicKey, kp.secretKey);
+    var combined = new Uint8Array(24 + box.length);
+    combined.set(nonce, 0);
+    combined.set(box, 24);
+    return uint8ToB64(combined);
+}
+function prepareE2eeMessages(messages, publicKeys) {
+    if (!messages || !publicKeys) return messages;
+    for (var i = 0; i < messages.length; i++) {
+        var m = messages[i];
+        if (!m.is_e2ee || !m.body_e2ee) continue;
+        if (m.sender_id === userId) {
+            m.body = '[پیام شما]';
+            continue;
+        }
+        var senderPub = publicKeys[m.sender_id];
+        if (!senderPub) { m.body = '[پیام رمزنگاری‌شده — کلید فرستنده در دسترس نیست]'; continue; }
+        var dec = decryptE2eeBody(m.body_e2ee, senderPub);
+        m.body = dec != null ? dec : '[نمی‌توان نمایش داد]';
+    }
+    return messages;
+}
 let currentOtherName = null;
 let currentGroupId = null;
 let currentGroupName = null;
@@ -2200,6 +2299,7 @@ function buildMessageHtml(m, otherReadUpTo) {
 
 function loadChat(isPolling) {
     if (!currentOtherId) return;
+    if (!isPolling) fetchOtherPublicKey(currentOtherId);
     var wasAtBottom = !isPolling || (chatMessages.scrollHeight - chatMessages.scrollTop <= chatMessages.clientHeight + 80);
     fetch('/api/chat/' + currentOtherId)
         .then(function(r) { return r.json(); })
@@ -2230,7 +2330,8 @@ function loadChat(isPolling) {
                 blockBtn.textContent = iBlockedThem ? 'رفع مسدودیت' : 'مسدود کردن';
             }
             var otherReadUpTo = data.other_read_up_to != null ? data.other_read_up_to : null;
-            chatMessages.innerHTML = data.messages.map(function(m) { return buildMessageHtml(m, otherReadUpTo); }).join('');
+            var messages = prepareE2eeMessages(data.messages, data.public_keys || {});
+            chatMessages.innerHTML = messages.map(function(m) { return buildMessageHtml(m, otherReadUpTo); }).join('');
             initVoiceBubbles();
             chatMessages.querySelectorAll('.msg-del').forEach(function(btn) {
                 btn.addEventListener('click', function() {
@@ -2359,6 +2460,7 @@ if (btnNotify) {
 showView('list');
 loadConversations();
 loadGroupsList();
+if (userId) uploadE2EEPublicKey();
 if (joinError) showToast(joinError);
 if (initialGroupId) {
     fetch('/api/groups/' + initialGroupId)
@@ -2488,10 +2590,22 @@ chatForm.addEventListener('submit', async function(e) {
     if (!body) return;
     btn.disabled = true;
     try {
+        var otherPub = otherPublicKeyByUserId[currentOtherId];
+        var payload;
+        if (otherPub && typeof encryptE2eeBody === 'function') {
+            var cipher = encryptE2eeBody(body, otherPub);
+            if (cipher) {
+                payload = JSON.stringify({ receiver_id: currentOtherId, e2ee_ciphertext: cipher });
+            } else {
+                payload = JSON.stringify({ receiver_id: currentOtherId, body: body });
+            }
+        } else {
+            payload = JSON.stringify({ receiver_id: currentOtherId, body: body });
+        }
         var r = await fetch('/api/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-            body: JSON.stringify({ receiver_id: currentOtherId, body: body })
+            body: payload
         });
         var res = await r.json();
         if (res.ok) { msgInput.value = ''; loadChat(); }
