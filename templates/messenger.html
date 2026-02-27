@@ -3232,7 +3232,7 @@ var callPermissionCancelBtn = document.getElementById('callPermissionCancelBtn')
 var callAfterPermissionGranted = null;
 
 function getMicConstraints() {
-    return { audio: { echoCancellation: true, noiseSuppression: true }, video: false };
+    return { audio: true, video: false };
 }
 function showCallPermissionModal() {
     if (callPermissionOverlay) {
@@ -3258,13 +3258,25 @@ function requestMicThen(callback) {
     navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
         callback(stream);
     }).catch(function(err) {
-        var msg = 'برای تماس باید اجازهٔ میکروفون بدهید.';
-        if (err && err.name === 'NotAllowedError') msg = 'اجازهٔ میکروفون داده نشد. روی «اجازه دادن» بزنید و در پنجرهٔ مرورگر یا اندروید اجازه بدهید.';
-        else if (err && err.name === 'NotFoundError') msg = 'میکروفونی یافت نشد.';
-        else if (err && err.name === 'SecurityError') msg = 'تماس صوتی فقط در سایت امن (HTTPS) کار می‌کند.';
-        showToast(msg);
-        showCallPermissionModal();
-        callAfterPermissionGranted = callback;
+        var name = err && err.name;
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+            showToast('اجازهٔ میکروفون داده نشد. روی «اجازه دادن» بزنید و در پنجرهٔ مرورگر یا اندروید اجازه بدهید.');
+            showCallPermissionModal();
+            callAfterPermissionGranted = callback;
+        } else if (name === 'NotFoundError') {
+            showToast('میکروفونی یافت نشد.');
+            callback(null);
+        } else if (name === 'SecurityError') {
+            showToast('تماس صوتی فقط در سایت امن (HTTPS) کار می‌کند.');
+            callback(null);
+        } else if (name === 'OverconstrainedError') {
+            showToast('تنظیمات میکروفون پشتیبانی نمی‌شود. مرورگر را به‌روز کنید.');
+            callback(null);
+        } else {
+            showToast('دسترسی به میکروفون ممکن نشد. اجازهٔ میکروفون را در تنظیمات سایت بررسی کنید.');
+            showCallPermissionModal();
+            callAfterPermissionGranted = callback;
+        }
     });
 }
 
