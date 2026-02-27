@@ -600,6 +600,12 @@ html.theme-light .contact-profile-modal { background: var(--tg-panel); box-shado
 .call-in-progress-text { font-size: 14px; font-weight: 500; color: var(--tg-text); }
 .call-btn-hangup { background: #e53935; color: #fff; width: 40px; height: 40px; border-radius: 50%; padding: 0; font-size: 1.1rem; }
 .call-btn-hangup:hover { background: #c62828; }
+.call-permission-modal { max-width: 320px; }
+.call-permission-title { margin: 0 0 0.5rem; font-size: 1.1rem; font-weight: 600; color: var(--tg-text); }
+.call-permission-desc { margin: 0 0 1rem; font-size: 13px; color: var(--tg-text-secondary); line-height: 1.5; }
+.call-btn-allow-mic { width: 100%; margin-bottom: 0.5rem; background: var(--tg-blue); color: #fff; }
+.call-btn-allow-mic:hover { background: var(--tg-blue-hover); }
+.call-btn-cancel-perm { width: 100%; }
 #remoteAudio { display: none; }
 
 .settings-about {
@@ -1632,6 +1638,15 @@ html.theme-light .chat-messages {
     <button type="button" class="btn call-btn-hangup" id="callHangupBtn" title="قطع تماس">📵</button>
 </div>
 <audio id="remoteAudio" autoplay playsinline></audio>
+<!-- مودال درخواست اجازهٔ میکروفون برای تماس -->
+<div class="call-overlay" id="callPermissionOverlay" aria-hidden="true">
+    <div class="call-incoming-modal call-permission-modal">
+        <p class="call-permission-title">برای تماس صوتی به میکروفون نیاز است</p>
+        <p class="call-permission-desc">با زدن دکمهٔ زیر اجازهٔ دسترسی به میکروفون را بدهید. در اندروید ممکن است پنجرهٔ اجازه نمایش داده شود.</p>
+        <button type="button" class="btn call-btn-allow-mic" id="callPermissionAllowBtn">اجازه دادن به میکروفون</button>
+        <button type="button" class="btn btn-secondary call-btn-cancel-perm" id="callPermissionCancelBtn">انصراف</button>
+    </div>
+</div>
 <div class="toast" id="toast" role="alert"></div>
 {% endblock %}
 {% block extra_js %}
@@ -3211,6 +3226,47 @@ var callIncomingFromId = null;
 var callIncomingFromName = null;
 var callPendingOffer = null;
 var callIsCaller = false;
+var callPermissionOverlay = document.getElementById('callPermissionOverlay');
+var callPermissionAllowBtn = document.getElementById('callPermissionAllowBtn');
+var callPermissionCancelBtn = document.getElementById('callPermissionCancelBtn');
+var callAfterPermissionGranted = null;
+
+function getMicConstraints() {
+    return { audio: { echoCancellation: true, noiseSuppression: true }, video: false };
+}
+function showCallPermissionModal() {
+    if (callPermissionOverlay) {
+        callPermissionOverlay.classList.add('open');
+        callPermissionOverlay.setAttribute('aria-hidden', 'false');
+    }
+}
+function hideCallPermissionModal() {
+    if (callPermissionOverlay) {
+        callPermissionOverlay.classList.remove('open');
+        callPermissionOverlay.setAttribute('aria-hidden', 'true');
+    }
+    callAfterPermissionGranted = null;
+}
+function requestMicThen(callback) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('تماس صوتی در این مرورگر پشتیبانی نمی‌شود.');
+        if (typeof callback === 'function') callback(null);
+        return;
+    }
+    if (typeof callback !== 'function') return;
+    var constraints = getMicConstraints();
+    navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+        callback(stream);
+    }).catch(function(err) {
+        var msg = 'برای تماس باید اجازهٔ میکروفون بدهید.';
+        if (err && err.name === 'NotAllowedError') msg = 'اجازهٔ میکروفون داده نشد. روی «اجازه دادن» بزنید و در پنجرهٔ مرورگر یا اندروید اجازه بدهید.';
+        else if (err && err.name === 'NotFoundError') msg = 'میکروفونی یافت نشد.';
+        else if (err && err.name === 'SecurityError') msg = 'تماس صوتی فقط در سایت امن (HTTPS) کار می‌کند.';
+        showToast(msg);
+        showCallPermissionModal();
+        callAfterPermissionGranted = callback;
+    });
+}
 
 function sendCallSignal(toUserId, type, payload) {
     return fetch('/api/call/signal', {
@@ -3253,10 +3309,33 @@ function endCall() {
     callIsCaller = false;
     if (callInProgress) callInProgress.style.display = 'none';
     if (callIncomingOverlay) { callIncomingOverlay.classList.remove('open'); callIncomingOverlay.setAttribute('aria-hidden', 'true'); }
+    hideCallPermissionModal();
     if (remoteAudio) remoteAudio.srcObject = null;
+}
+function proceedOutgoingCall(stream) {
+    if (!stream || !callOtherId || !callPeerConnection) return;
+    var pc = callPeerConnection;
+    callLocalStream = stream;
+    stream.getTracks().forEach(function(t) { pc.addTrack(t, stream); });
+    pc.createOffer().then(function(offer) {
+        return pc.setLocalDescription(offer);
+    }).then(function() {
+        return sendCallSignal(callOtherId, 'offer', { sdp: pc.localDescription, username: (typeof username !== 'undefined' ? username : '') });
+    }).then(function(res) {
+        if (!res.ok) { endCall(); showToast(res.error || 'خطا'); return; }
+        callSignalsInterval = setInterval(pollCallSignals, 1500);
+        pollCallSignals();
+    }).catch(function() {
+        endCall();
+        showToast('خطا در برقراری تماس');
+    });
 }
 function startOutgoingCall() {
     if (!currentOtherId || callPeerConnection) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('تماس صوتی در این مرورگر پشتیبانی نمی‌شود.');
+        return;
+    }
     callOtherId = currentOtherId;
     callOtherName = currentOtherName || '';
     callIsCaller = true;
@@ -3276,27 +3355,39 @@ function startOutgoingCall() {
             endCall();
         }
     };
-    navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(function(stream) {
-        callLocalStream = stream;
-        stream.getTracks().forEach(function(t) { pc.addTrack(t, stream); });
-        return pc.createOffer();
-    }).then(function(offer) {
-        return pc.setLocalDescription(offer);
+    requestMicThen(function(stream) {
+        if (!stream) return;
+        hideCallPermissionModal();
+        proceedOutgoingCall(stream);
+    });
+}
+function proceedAcceptCall(stream) {
+    if (!stream || !callPeerConnection || !callOtherId) return;
+    var pc = callPeerConnection;
+    callLocalStream = stream;
+    stream.getTracks().forEach(function(t) { pc.addTrack(t, stream); });
+    pc.createAnswer().then(function(answer) {
+        return pc.setLocalDescription(answer);
     }).then(function() {
-        return sendCallSignal(callOtherId, 'offer', { sdp: pc.localDescription, username: (typeof username !== 'undefined' ? username : '') });
+        return sendCallSignal(callOtherId, 'answer', pc.localDescription);
     }).then(function(res) {
-        if (!res.ok) { endCall(); showToast(res.error || 'خطا'); return; }
+        if (!res.ok) { endCall(); return; }
         callSignalsInterval = setInterval(pollCallSignals, 1500);
         pollCallSignals();
-    }).catch(function(err) {
+        callPendingOffer = null;
+    }).catch(function() {
         endCall();
-        showToast('خطا در برقراری تماس');
+        showToast('خطا در پذیرش تماس');
     });
 }
 function acceptIncomingCall() {
     if (!callPendingOffer || !callIncomingFromId) return;
     var offerSdp = callPendingOffer.sdp || callPendingOffer;
     if (!offerSdp || !offerSdp.sdp) { endCall(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('تماس صوتی در این مرورگر پشتیبانی نمی‌شود.');
+        return;
+    }
     callOtherId = callIncomingFromId;
     callOtherName = callIncomingFromName;
     callIsCaller = false;
@@ -3318,23 +3409,38 @@ function acceptIncomingCall() {
         }
     };
     pc.setRemoteDescription(new RTCSessionDescription(offerSdp)).then(function() {
-        return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    }).then(function(stream) {
-        callLocalStream = stream;
-        stream.getTracks().forEach(function(t) { pc.addTrack(t, stream); });
-        return pc.createAnswer();
-    }).then(function(answer) {
-        return pc.setLocalDescription(answer);
-    }).then(function() {
-        return sendCallSignal(callOtherId, 'answer', pc.localDescription);
-    }).then(function(res) {
-        if (!res.ok) { endCall(); return; }
-        callSignalsInterval = setInterval(pollCallSignals, 1500);
-        pollCallSignals();
-        callPendingOffer = null;
+        requestMicThen(function(stream) {
+            if (!stream) return;
+            hideCallPermissionModal();
+            proceedAcceptCall(stream);
+        });
     }).catch(function() {
         endCall();
         showToast('خطا در پذیرش تماس');
+    });
+}
+if (callPermissionAllowBtn) {
+    callPermissionAllowBtn.addEventListener('click', function() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast('تماس صوتی در این مرورگر پشتیبانی نمی‌شود.');
+            hideCallPermissionModal();
+            return;
+        }
+        navigator.mediaDevices.getUserMedia(getMicConstraints()).then(function(stream) {
+            hideCallPermissionModal();
+            if (callAfterPermissionGranted) {
+                callAfterPermissionGranted(stream);
+                callAfterPermissionGranted = null;
+            }
+        }).catch(function(err) {
+            showToast(err && err.name === 'NotAllowedError' ? 'اجازهٔ میکروفون داده نشد. در تنظیمات مرورگر یا دستگاه آن را فعال کنید.' : 'دسترسی به میکروفون ممکن نشد.');
+        });
+    });
+}
+if (callPermissionCancelBtn) {
+    callPermissionCancelBtn.addEventListener('click', function() {
+        endCall();
+        hideCallPermissionModal();
     });
 }
 if (chatCallBtn) chatCallBtn.addEventListener('click', startOutgoingCall);
