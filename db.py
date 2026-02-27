@@ -62,6 +62,8 @@ def _migrate_messages_media(c):
         ("mime_type", "TEXT"),
         ("deleted_at", "TIMESTAMP"),
         ("is_e2ee", "INTEGER DEFAULT 0"),
+        ("reply_to_id", "INTEGER REFERENCES messages(id)"),
+        ("edited_at", "TIMESTAMP"),
     ]:
         if col not in cols:
             c.execute(f"ALTER TABLE messages ADD COLUMN {col} {defn}")
@@ -144,8 +146,13 @@ def _migrate_e2ee(c):
         )
     """)
     cur = c.execute("PRAGMA table_info(messages)")
-    if "is_e2ee" not in [row[1] for row in cur.fetchall()]:
+    msg_cols = [row[1] for row in cur.fetchall()]
+    if "is_e2ee" not in msg_cols:
         c.execute("ALTER TABLE messages ADD COLUMN is_e2ee INTEGER DEFAULT 0")
+    if "reply_to_id" not in msg_cols:
+        c.execute("ALTER TABLE messages ADD COLUMN reply_to_id INTEGER REFERENCES messages(id)")
+    if "edited_at" not in msg_cols:
+        c.execute("ALTER TABLE messages ADD COLUMN edited_at TIMESTAMP")
 
 
 def hash_password(password: str) -> str:
@@ -371,29 +378,42 @@ def is_blocked(blocker_id: int, blocked_id: int) -> bool:
         return r is not None
 
 
-def message_send(sender_id: int, receiver_id: int, body: str, body_e2ee_blob: bytes | None = None) -> bool:
+def message_send(sender_id: int, receiver_id: int, body: str, body_e2ee_blob: bytes | None = None, reply_to_id: int | None = None) -> bool:
     import config
     if is_blocked(receiver_id, sender_id):
         return False
-    if body_e2ee_blob is not None:
-        # پیام E2EE: کلاینت قبلاً رمزنگاری کرده؛ سرور فقط ذخیره می‌کند (بدون دسترسی به متن اصلی)
-        with get_conn() as c:
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(messages)")
+        cols = [r[1] for r in cur.fetchall()]
+        has_reply = "reply_to_id" in cols
+        if body_e2ee_blob is not None:
+            if has_reply and reply_to_id:
+                c.execute(
+                    "INSERT INTO messages (sender_id, receiver_id, body_encrypted, is_e2ee, reply_to_id) VALUES (?, ?, ?, 1, ?)",
+                    (sender_id, receiver_id, body_e2ee_blob, reply_to_id),
+                )
+            else:
+                c.execute(
+                    "INSERT INTO messages (sender_id, receiver_id, body_encrypted, is_e2ee) VALUES (?, ?, ?, 1)",
+                    (sender_id, receiver_id, body_e2ee_blob),
+                )
+            return True
+        if not body or len(body) > config.MAX_MESSAGE_LEN:
+            return False
+        enc = encrypt_message(body)
+        if enc is None:
+            return False
+        if has_reply and reply_to_id:
             c.execute(
-                "INSERT INTO messages (sender_id, receiver_id, body_encrypted, is_e2ee) VALUES (?, ?, ?, 1)",
-                (sender_id, receiver_id, body_e2ee_blob),
+                "INSERT INTO messages (sender_id, receiver_id, body_encrypted, reply_to_id) VALUES (?, ?, ?, ?)",
+                (sender_id, receiver_id, enc, reply_to_id),
+            )
+        else:
+            c.execute(
+                "INSERT INTO messages (sender_id, receiver_id, body_encrypted) VALUES (?, ?, ?)",
+                (sender_id, receiver_id, enc),
             )
         return True
-    if not body or len(body) > config.MAX_MESSAGE_LEN:
-        return False
-    enc = encrypt_message(body)
-    if enc is None:
-        return False
-    with get_conn() as c:
-        c.execute(
-            "INSERT INTO messages (sender_id, receiver_id, body_encrypted) VALUES (?, ?, ?)",
-            (sender_id, receiver_id, enc),
-        )
-    return True
 
 
 def messages_for_user(user_id: int, other_id: int | None = None, include_e2ee_raw: bool = False):
@@ -405,52 +425,43 @@ def messages_for_user(user_id: int, other_id: int | None = None, include_e2ee_ra
         cur = c.execute("PRAGMA table_info(messages)")
         cols = [r[1] for r in cur.fetchall()]
         has_e2ee = "is_e2ee" in cols
+        has_reply_to = "reply_to_id" in cols
+        has_edited_at = "edited_at" in cols
         deleted_clause = " AND (deleted_at IS NULL)" if "deleted_at" in cols else ""
         if other_id is not None:
+            sel = "id, sender_id, receiver_id, body_encrypted, created_at, message_type, file_path, file_name, mime_type"
             if has_e2ee:
-                rows = c.execute(
-                    """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
-                              message_type, file_path, file_name, mime_type, is_e2ee
-                       FROM messages
-                       WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
-                       """ + deleted_clause + """
-                       ORDER BY created_at""",
-                    (user_id, other_id, other_id, user_id),
-                ).fetchall()
-            else:
-                rows = c.execute(
-                    """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
-                              message_type, file_path, file_name, mime_type
-                       FROM messages
-                       WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
-                       """ + deleted_clause + """
-                       ORDER BY created_at""",
-                    (user_id, other_id, other_id, user_id),
-                ).fetchall()
+                sel += ", is_e2ee"
+            if has_reply_to:
+                sel += ", reply_to_id"
+            if has_edited_at:
+                sel += ", edited_at"
+            rows = c.execute(
+                """SELECT """ + sel + """
+                   FROM messages
+                   WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+                   """ + deleted_clause + """
+                   ORDER BY created_at""",
+                (user_id, other_id, other_id, user_id),
+            ).fetchall()
         else:
+            sel = "id, sender_id, receiver_id, body_encrypted, created_at, message_type, file_path, file_name, mime_type"
             if has_e2ee:
-                rows = c.execute(
-                    """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
-                              message_type, file_path, file_name, mime_type, is_e2ee
-                       FROM messages
-                       WHERE (sender_id = ? OR receiver_id = ?)
-                       """ + deleted_clause + """
-                       ORDER BY created_at DESC""",
-                    (user_id, user_id),
-                ).fetchall()
-            else:
-                rows = c.execute(
-                    """SELECT id, sender_id, receiver_id, body_encrypted, created_at,
-                              message_type, file_path, file_name, mime_type
-                       FROM messages
-                       WHERE (sender_id = ? OR receiver_id = ?)
-                       """ + deleted_clause + """
-                       ORDER BY created_at DESC""",
-                    (user_id, user_id),
-                ).fetchall()
+                sel += ", is_e2ee"
+            rows = c.execute(
+                "SELECT " + sel + " FROM messages WHERE (sender_id = ? OR receiver_id = ?) " + deleted_clause + " ORDER BY created_at DESC",
+                (user_id, user_id),
+            ).fetchall()
     out = []
     for r in rows:
-        is_e2ee = bool(has_e2ee and len(r) > 9 and r[9])
+        idx = 9
+        is_e2ee = bool(has_e2ee and len(r) > idx and r[idx])
+        if has_e2ee:
+            idx += 1
+        reply_to_id_val = r[idx] if has_reply_to and len(r) > idx else None
+        if has_reply_to:
+            idx += 1
+        edited_at_val = r[idx] if has_edited_at and len(r) > idx else None
         body_e2ee = ""
         if is_e2ee and include_e2ee_raw and other_id is not None and r[3]:
             body = ""
@@ -479,6 +490,13 @@ def messages_for_user(user_id: int, other_id: int | None = None, include_e2ee_ra
         if body_e2ee:
             item["body_e2ee"] = body_e2ee
             item["is_e2ee"] = True
+        if reply_to_id_val and other_id is not None:
+            item["reply_to_id"] = reply_to_id_val
+            prep = get_message_reply_preview(reply_to_id_val, user_id, other_id)
+            if prep:
+                item["reply_preview"] = prep
+        if edited_at_val:
+            item["edited_at"] = edited_at_val
         out.append(item)
     return out
 
@@ -589,6 +607,7 @@ def get_conversations(user_id: int, limit: int = 100, search: str = "") -> list[
             "other_username": u["username"],
             "last_at": r[1],
             "last_preview": preview,
+            "unread_count": unread_count(user_id, other_id),
         })
         if len(out) >= limit:
             break
@@ -637,6 +656,87 @@ def message_send_media(
                 (sender_id, receiver_id, body_blob, message_type, file_path, file_name or "", mime_type or ""),
             )
     return True
+
+
+def get_message_reply_preview(reply_to_id: int, conversation_user_id: int, conversation_other_id: int) -> dict | None:
+    """پیش‌نمایش پیامِ در حال پاسخ: فقط اگر آن پیام در همین گفتگو باشد."""
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(messages)")
+        cols = [r[1] for r in cur.fetchall()]
+        has_e2ee = "is_e2ee" in cols
+        row = c.execute(
+            "SELECT sender_id, receiver_id, body_encrypted, message_type, is_e2ee FROM messages WHERE id = ? AND deleted_at IS NULL",
+            (reply_to_id,),
+        ).fetchone() if "deleted_at" in cols else c.execute(
+            "SELECT sender_id, receiver_id, body_encrypted, message_type FROM messages WHERE id = ?",
+            (reply_to_id,),
+        ).fetchone()
+        if not row:
+            return None
+        s, rcv = row[0], row[1]
+        if not ((s == conversation_user_id and rcv == conversation_other_id) or (s == conversation_other_id and rcv == conversation_user_id)):
+            return None
+        is_e2ee = bool(has_e2ee and len(row) > 4 and row[4])
+        if is_e2ee:
+            body = "[پیام]"
+        else:
+            body = decrypt_message(row[2]) if row[2] else ""
+            if body is None:
+                body = "[پیام]"
+            else:
+                body = (body.strip() or "")[:80]
+                if len(body) > 80:
+                    body += "…"
+        msg_type = (row[3] if len(row) > 3 else None) or "text"
+        u = get_user_by_id(s)
+        return {"id": reply_to_id, "sender_id": s, "body": body, "message_type": msg_type, "sender_username": u["username"] if u else ""}
+
+
+def message_edit(message_id: int, user_id: int, new_body: str) -> bool:
+    """ویرایش پیام متنی (فقط فرستنده، فقط متن)."""
+    import config
+    new_body = (new_body or "").strip()
+    if not new_body or len(new_body) > config.MAX_MESSAGE_LEN:
+        return False
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(messages)")
+        if "edited_at" not in [r[1] for r in cur.fetchall()]:
+            return False
+        row = c.execute(
+            "SELECT sender_id, message_type, is_e2ee FROM messages WHERE id = ? AND deleted_at IS NULL",
+            (message_id,),
+        ).fetchone()
+        if not row or row[0] != user_id or (row[1] or "text") != "text":
+            return False
+        if row[2]:
+            return False
+        enc = encrypt_message(new_body)
+        if enc is None:
+            return False
+        c.execute(
+            "UPDATE messages SET body_encrypted = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (enc, message_id),
+        )
+    return True
+
+
+def unread_count(user_id: int, other_id: int) -> int:
+    """تعداد پیام‌های خوانده‌نشده از طرف other_id برای user_id."""
+    last_read = read_receipt_get(user_id, other_id)
+    with get_conn() as c:
+        cur = c.execute("PRAGMA table_info(messages)")
+        deleted_clause = " AND deleted_at IS NULL" if "deleted_at" in [r[1] for r in cur.fetchall()] else ""
+        if last_read is None:
+            r = c.execute(
+                "SELECT COUNT(*) FROM messages WHERE sender_id = ? AND receiver_id = ?" + deleted_clause,
+                (other_id, user_id),
+            ).fetchone()
+        else:
+            r = c.execute(
+                "SELECT COUNT(*) FROM messages WHERE sender_id = ? AND receiver_id = ? AND id > ?" + deleted_clause,
+                (other_id, user_id, last_read),
+            ).fetchone()
+        return r[0] if r else 0
 
 
 def get_message_by_id(msg_id: int) -> dict | None:

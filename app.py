@@ -565,10 +565,14 @@ def api_send():
             blob = base64.decodebytes((e2ee_ciphertext_b64 or "").encode() if isinstance(e2ee_ciphertext_b64, str) else e2ee_ciphertext_b64)
         except Exception:
             return jsonify({"ok": False, "error": "فرمت پیام رمزنگاری‌شده نامعتبر"}), 400
-        if not db.message_send(uid, receiver_id, "", body_e2ee_blob=blob):
+        _rt = data.get("reply_to_id")
+        reply_to_id = int(_rt) if _rt is not None else None
+        if not db.message_send(uid, receiver_id, "", body_e2ee_blob=blob, reply_to_id=reply_to_id):
             return jsonify({"ok": False, "error": "خطا در ارسال پیام"}), 500
         return jsonify({"ok": True})
     body = (data.get("body") or "").strip()
+    _rt = data.get("reply_to_id")
+    reply_to_id = int(_rt) if _rt is not None else None
     if not body:
         return jsonify({"ok": False, "error": "متن پیام خالی است"}), 400
     if len(body) > config.MAX_MESSAGE_LEN:
@@ -581,20 +585,29 @@ def api_send():
         return jsonify({"ok": False, "error": "کاربر یافت نشد"}), 404
     if db.is_blocked(receiver_id, uid):
         return jsonify({"ok": False, "error": "شما توسط این کاربر مسدود شده‌اید"}), 403
-    if not db.message_send(uid, receiver_id, body):
+    if not db.message_send(uid, receiver_id, body, reply_to_id=reply_to_id):
         return jsonify({"ok": False, "error": "خطا در ارسال پیام"}), 500
     return jsonify({"ok": True})
 
 
-@app.route("/api/message/<int:message_id>", methods=["DELETE"])
+@app.route("/api/message/<int:message_id>", methods=["DELETE", "PATCH"])
 @user_required
-def api_delete_message(message_id):
+def api_message(message_id):
     uid = session["user_id"]
     if not security.csrf_valid(session, request.headers.get("X-CSRF-Token") or (request.get_json() or {}).get("csrf_token")):
         return jsonify({"ok": False, "error": "درخواست نامعتبر"}), 403
-    if db.message_delete(message_id, uid):
-        return jsonify({"ok": True})
-    return jsonify({"ok": False, "error": "امکان حذف این پیام نیست"}), 400
+    if request.method == "DELETE":
+        if db.message_delete(message_id, uid):
+            return jsonify({"ok": True})
+        return jsonify({"ok": False, "error": "امکان حذف این پیام نیست"}), 400
+    if request.method == "PATCH":
+        data = request.get_json() or {}
+        body = (data.get("body") or "").strip()
+        if not body:
+            return jsonify({"ok": False, "error": "متن پیام خالی است"}), 400
+        if db.message_edit(message_id, uid, body):
+            return jsonify({"ok": True})
+        return jsonify({"ok": False, "error": "امکان ویرایش این پیام نیست"}), 400
 
 
 @app.route("/api/conversation/<int:other_id>/clear", methods=["POST"])

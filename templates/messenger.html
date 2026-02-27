@@ -613,6 +613,19 @@ html.theme-light .chat-messages {
 }
 .msg .msg-del:hover { opacity: 1; background: rgba(0,0,0,0.15); }
 .msg .msg-sender-name { font-size: 0.75rem; font-weight: 600; color: var(--tg-blue); margin-bottom: 0.15rem; display: block; }
+.msg-reply-preview { border-right: 3px solid var(--tg-blue); padding: 0.25rem 0.5rem; margin-bottom: 0.35rem; font-size: 0.85rem; color: var(--tg-text-secondary); }
+.msg-reply-preview .msg-reply-author { font-weight: 600; color: var(--tg-text); }
+.msg-edited { font-size: 0.7rem; opacity: 0.8; margin-right: 0.25rem; }
+.msg-actions { display: flex; gap: 0.2rem; margin-top: 0.2rem; }
+.msg-actions .msg-action-btn { padding: 0.2rem 0.4rem; font-size: 0.75rem; border: none; background: transparent; color: var(--tg-text-secondary); cursor: pointer; border-radius: 4px; }
+.msg-actions .msg-action-btn:hover { background: rgba(255,255,255,0.15); color: var(--tg-text); }
+.reply-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.5rem; background: var(--tg-surface); border-radius: 10px; border: 1px solid var(--tg-border); }
+.reply-bar-preview { flex: 1; min-width: 0; font-size: 0.9rem; color: var(--tg-text-secondary); }
+.reply-bar-preview strong { color: var(--tg-text); display: block; font-size: 0.8rem; }
+.reply-bar-close { width: 28px; height: 28px; padding: 0; border: none; border-radius: 50%; background: transparent; color: var(--tg-text-secondary); cursor: pointer; font-size: 1.2rem; line-height: 1; }
+.reply-bar-close:hover { background: var(--tg-border); color: var(--tg-text); }
+.tg-chat-list .history-item .h-unread { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--tg-blue); color: #fff; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.tg-chat-list .history-item .h-unread.empty { display: none; }
 /* ——— فرم ارسال (سبک تلگرام) ——— */
 .chat-form {
     display: flex;
@@ -1186,6 +1199,11 @@ html.theme-light .chat-messages {
                         <button type="button" class="btn btn-sm" id="btnSendVoice">ارسال ویس</button>
                     </div>
                 </div>
+                <!-- نوار پاسخ (مثل تلگرام) -->
+                <div class="reply-bar" id="replyBar" style="display: none;">
+                    <div class="reply-bar-preview" id="replyBarPreview"></div>
+                    <button type="button" class="reply-bar-close" id="replyBarClose" aria-label="لغو پاسخ">×</button>
+                </div>
                 <!-- ردیف اصلی: ورودی + دکمه‌ها -->
                 <div class="composer-row">
                     <input type="text" id="msgInput" class="composer-input" placeholder="پیام..." autocomplete="off" maxlength="4096">
@@ -1509,6 +1527,7 @@ function prepareE2eeMessages(messages, publicKeys) {
     return messages;
 }
 let currentOtherName = null;
+var replyingTo = null;
 let currentGroupId = null;
 let currentGroupName = null;
 let currentGroupInviteCode = null;
@@ -1897,10 +1916,12 @@ function loadConversations(q) {
                 var initial = rawName.charAt(0).toUpperCase() || '?';
                 var shortTime = (c.last_at || '').toString().trim();
                 if (shortTime.length > 16) shortTime = shortTime.slice(11, 16);
+                var unread = (c.unread_count | 0);
+                var unreadHtml = unread > 0 ? '<span class="h-unread">' + (unread > 99 ? '99+' : unread) + '</span>' : '<span class="h-unread empty"></span>';
                 return '<li class="history-item' + (isActive ? ' active' : '') + '" data-id="' + c.other_id + '" data-name="' + safeName + '">' +
                     '<div class="h-avatar">' + escapeHtml(initial) + '</div>' +
                     '<div class="h-body">' +
-                    '<div class="h-top"><span class="h-username">' + safeName + '</span><span class="h-time">' + escapeHtml(shortTime) + '</span></div>' +
+                    '<div class="h-top"><span class="h-username">' + safeName + '</span><span class="h-time">' + escapeHtml(shortTime) + '</span>' + unreadHtml + '</div>' +
                     '<div class="h-preview">' + safePreview + '</div></div>' +
                     '<button type="button" class="h-delete" data-id="' + c.other_id + '" title="حذف گفتگو">🗑</button></li>';
             }).join('');
@@ -2090,6 +2111,7 @@ backBtn.addEventListener('click', function() {
         lastChatLastId = 0;
         clearAttachmentStrip();
         showOpenError('');
+        hideReplyBar();
     }
     if (viewMode === 'group') {
         stopChatPoll();
@@ -2362,6 +2384,9 @@ function buildMessageHtml(m, otherReadUpTo) {
     if (sent && m.id) {
         parts.push('<button type="button" class="msg-del btn btn-ghost" data-msg-id="' + m.id + '" title="حذف پیام">×</button>');
     }
+    if (m.reply_preview && m.reply_preview.body) {
+        parts.push('<div class="msg-reply-preview"><span class="msg-reply-author">' + escapeHtml(m.reply_preview.sender_username || '') + '</span> ' + escapeHtml(m.reply_preview.body) + '</div>');
+    }
     if (m.message_type === 'image' && m.id) {
         if (e2eeMedia) {
             parts.push('<img class="msg-img msg-e2ee-media" data-msg-id="' + m.id + '" data-mime="' + escapeHtml(m.mime_type || 'image/jpeg') + '" alt="عکس" loading="lazy">');
@@ -2412,11 +2437,21 @@ function buildMessageHtml(m, otherReadUpTo) {
     var timeStr = (m.created_at || '').toString().trim();
     if (timeStr.length > 16) timeStr = timeStr.slice(11, 16);
     var meta = '<div class="msg-meta"><time>' + escapeHtml(timeStr) + '</time>';
+    if (m.edited_at) meta += '<span class="msg-edited">(ویرایش شده)</span>';
     if (sent && otherReadUpTo != null && m.id <= otherReadUpTo) {
         meta += '<span class="msg-read">✓✓</span>';
     }
     meta += '</div>';
     parts.push(meta);
+    var canEdit = sent && (m.message_type || 'text') === 'text' && !m.is_e2ee;
+    var bodyForCopy = (m.body || '').trim();
+    var bodyAttr = bodyForCopy.slice(0, 2000).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    parts.push('<div class="msg-actions">' +
+        '<button type="button" class="msg-action-btn msg-btn-reply" data-msg-id="' + m.id + '" data-body="' + bodyAttr + '" data-sender="' + escapeHtml(currentOtherName || '') + '" title="پاسخ">پاسخ</button>' +
+        (canEdit ? '<button type="button" class="msg-action-btn msg-btn-edit" data-msg-id="' + m.id + '" data-body="' + bodyAttr + '" title="ویرایش">ویرایش</button>' : '') +
+        (bodyForCopy ? '<button type="button" class="msg-action-btn msg-btn-copy" data-body="' + bodyAttr + '" title="کپی">کپی</button>' : '') +
+        (bodyForCopy ? '<button type="button" class="msg-action-btn msg-btn-forward" data-body="' + bodyAttr + '" title="ارسال به چت دیگر">ارسال</button>' : '') +
+        '</div>');
     return '<div class="msg ' + cls + '" data-msg-id="' + (m.id || '') + '" data-sender-id="' + (m.sender_id || '') + '" data-receiver-id="' + (m.receiver_id || '') + '">' + parts.join('') + '</div>';
 }
 function initE2eeMedia(messages, publicKeys) {
@@ -2473,6 +2508,85 @@ function buildChatMessagesWithDateSep(messages, otherReadUpTo) {
     return out.join('');
 }
 
+var replyBar = document.getElementById('replyBar');
+var replyBarPreview = document.getElementById('replyBarPreview');
+var replyBarClose = document.getElementById('replyBarClose');
+function hideReplyBar() {
+    replyingTo = null;
+    if (replyBar) replyBar.style.display = 'none';
+}
+function showReplyBar(id, body, senderName) {
+    replyingTo = { id: id, body: body || '', sender_username: senderName || '' };
+    if (replyBar && replyBarPreview) {
+        replyBarPreview.innerHTML = '<strong>' + escapeHtml(senderName || '') + '</strong> ' + escapeHtml((body || '').slice(0, 60));
+        if ((body || '').length > 60) replyBarPreview.innerHTML += '…';
+        replyBar.style.display = 'flex';
+    }
+    if (msgInput) msgInput.focus();
+}
+function bindMessageActionButtons() {
+    if (!chatMessages) return;
+    chatMessages.querySelectorAll('.msg-btn-reply').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var mid = btn.getAttribute('data-msg-id');
+            var body = btn.getAttribute('data-body') || '';
+            var sender = btn.getAttribute('data-sender') || currentOtherName || '';
+            showReplyBar(parseInt(mid, 10), body, sender);
+        });
+    });
+    chatMessages.querySelectorAll('.msg-btn-edit').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var mid = parseInt(btn.getAttribute('data-msg-id'), 10);
+            var body = btn.getAttribute('data-body') || '';
+            var newBody = prompt('متن جدید:', body);
+            if (newBody === null) return;
+            newBody = newBody.trim();
+            if (!newBody) return;
+            fetch('/api/message/' + mid, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                body: JSON.stringify({ body: newBody })
+            }).then(function(r) { return r.json(); }).then(function(res) {
+                if (res.ok) { loadChat(); showToast('پیام ویرایش شد'); }
+                else { showToast(res.error || 'خطا'); }
+            });
+        });
+    });
+    chatMessages.querySelectorAll('.msg-btn-copy').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var body = btn.getAttribute('data-body') || '';
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(body).then(function() { showToast('کپی شد'); }).catch(function() { showToast('کپی نشد'); });
+            } else { showToast('کپی در این مرورگر پشتیبانی نمی‌شود'); }
+        });
+    });
+    chatMessages.querySelectorAll('.msg-btn-forward').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var body = btn.getAttribute('data-body') || '';
+            if (!body) return;
+            fetch('/api/conversations').then(function(r) { return r.json(); }).then(function(list) {
+                var names = (list || []).filter(function(c) { return c.other_id !== currentOtherId; }).map(function(c) { return c.other_username; });
+                if (names.length === 0) { showToast('گفتگوی دیگری برای ارسال نیست'); return; }
+                var name = prompt('ارسال به (نام کاربری):\n' + names.slice(0, 10).join(', ') + (names.length > 10 ? '...' : ''), names[0]);
+                if (!name || !name.trim()) return;
+                name = name.trim();
+                var other = (list || []).find(function(c) { return (c.other_username || '').toLowerCase() === name.toLowerCase(); });
+                if (!other) { showToast('کاربر یافت نشد'); return; }
+                fetch('/api/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                    body: JSON.stringify({ receiver_id: other.other_id, body: body })
+                }).then(function(r) { return r.json(); }).then(function(res) {
+                    if (res.ok) { showToast('ارسال شد به ' + (other.other_username || '')); }
+                    else { showToast(res.error || 'خطا'); }
+                });
+            });
+        });
+    });
+}
+
+if (replyBarClose) replyBarClose.addEventListener('click', hideReplyBar);
+
 function loadChat(isPolling) {
     if (!currentOtherId) return;
     if (!isPolling) fetchOtherPublicKey(currentOtherId);
@@ -2525,6 +2639,7 @@ function loadChat(isPolling) {
                     });
                 });
             });
+            bindMessageActionButtons();
             if (wasAtBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
             if (maxId > 0) {
                 fetch('/api/chat/' + currentOtherId, {
@@ -2796,15 +2911,16 @@ chatForm.addEventListener('submit', async function(e) {
     try {
         var otherPub = otherPublicKeyByUserId[currentOtherId];
         var payload;
+        var replyId = replyingTo ? replyingTo.id : null;
         if (otherPub && typeof encryptE2eeBody === 'function') {
             var cipher = encryptE2eeBody(body, otherPub);
             if (cipher) {
-                payload = JSON.stringify({ receiver_id: currentOtherId, e2ee_ciphertext: cipher });
+                payload = JSON.stringify({ receiver_id: currentOtherId, e2ee_ciphertext: cipher, reply_to_id: replyId });
             } else {
-                payload = JSON.stringify({ receiver_id: currentOtherId, body: body });
+                payload = JSON.stringify({ receiver_id: currentOtherId, body: body, reply_to_id: replyId });
             }
         } else {
-            payload = JSON.stringify({ receiver_id: currentOtherId, body: body });
+            payload = JSON.stringify({ receiver_id: currentOtherId, body: body, reply_to_id: replyId });
         }
         var r = await fetch('/api/send', {
             method: 'POST',
@@ -2812,7 +2928,7 @@ chatForm.addEventListener('submit', async function(e) {
             body: payload
         });
         var res = await r.json();
-        if (res.ok) { msgInput.value = ''; loadChat(); }
+        if (res.ok) { msgInput.value = ''; hideReplyBar(); loadChat(); }
         else { showToast(res.error || 'خطا در ارسال'); }
     } finally { btn.disabled = false; }
 });
