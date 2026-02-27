@@ -12,29 +12,31 @@
     <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
     <style>
         :root {
-            --bg: #0f172a;
-            --bg-grad: linear-gradient(160deg, #0f172a 0%, #1e293b 35%, #0f172a 100%);
+            --bg: #0c1222;
+            --bg-grad: linear-gradient(165deg, #0c1222 0%, #1a2332 40%, #0f172a 100%);
             --bg-soft: #1e293b;
-            --surface: #334155;
-            --surface-hover: #475569;
-            --border: #475569;
+            --surface: #1e293b;
+            --surface-hover: #334155;
+            --border: rgba(71, 85, 105, 0.5);
             --text: #f1f5f9;
             --text-soft: #94a3b8;
             --accent: #06b6d4;
             --accent-hover: #22d3ee;
-            --accent-glow: rgba(6, 182, 212, 0.25);
-            --accent-dim: rgba(6, 182, 212, 0.15);
-            --danger: #f43f5e;
+            --accent-glow: rgba(6, 182, 212, 0.3);
+            --accent-dim: rgba(6, 182, 212, 0.12);
+            --danger: #ef4444;
             --success: #10b981;
             --radius: 16px;
-            --radius-sm: 10px;
+            --radius-sm: 12px;
             --radius-pill: 999px;
-            --shadow: 0 10px 40px rgba(0,0,0,0.4);
-            --shadow-sm: 0 2px 12px rgba(0,0,0,0.25);
+            --shadow: 0 12px 48px rgba(0,0,0,0.35);
+            --shadow-sm: 0 2px 12px rgba(0,0,0,0.2);
             --safe-top: env(safe-area-inset-top, 0);
             --safe-bottom: env(safe-area-inset-bottom, 0);
             --ease: cubic-bezier(0.4, 0, 0.2, 1);
             --transition: 0.25s var(--ease);
+            --card-bg: rgba(30, 41, 59, 0.88);
+            --card-border: 1px solid rgba(71, 85, 105, 0.45);
         }
         * { box-sizing: border-box; }
         html { -webkit-tap-highlight-color: transparent; scroll-behavior: smooth; }
@@ -53,8 +55,8 @@
         }
         body.page-enter { animation: pageIn 0.4s var(--ease) forwards; }
         @keyframes pageIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         a { color: var(--accent); text-decoration: none; transition: color var(--transition), opacity var(--transition); }
         a:hover { color: var(--accent-hover); text-decoration: none; opacity: 0.95; }
@@ -76,10 +78,10 @@
             font-weight: 600;
             transition: background var(--transition), transform 0.15s var(--ease), box-shadow var(--transition);
         }
-        .btn:hover { background: var(--accent-hover); box-shadow: 0 0 20px var(--accent-glow); }
-        .btn:active { transform: scale(0.97); }
+        .btn:hover { background: var(--accent-hover); box-shadow: 0 0 24px var(--accent-glow); }
+        .btn:active { transform: scale(0.98); }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .btn-secondary { background: var(--surface); color: var(--text); }
+        .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
         .btn-secondary:hover { background: var(--surface-hover); box-shadow: none; }
         .btn-ghost { background: transparent; color: var(--text-soft); }
         .btn-ghost:hover { background: var(--accent-dim); color: var(--accent); }
@@ -102,10 +104,69 @@
         }
         input::placeholder, textarea::placeholder { color: var(--text-soft); opacity: 0.8; }
         label { display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem; color: var(--text-soft); }
+        .auth-page {
+            min-height: calc(100vh - 2rem);
+            min-height: calc(100dvh - 2rem);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+        .page-card {
+            width: 100%;
+            max-width: 420px;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: var(--shadow), 0 0 0 1px rgba(255,255,255,0.04);
+            border: var(--card-border);
+            animation: cardIn 0.45s var(--ease) forwards;
+            opacity: 0;
+            transform: translateY(16px);
+        }
+        @keyframes cardIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .page-card .card-logo {
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 1.25rem;
+            background: linear-gradient(135deg, var(--accent), #22d3ee);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            box-shadow: 0 8px 24px var(--accent-glow);
+        }
+        .page-card h1 { margin: 0 0 0.5rem 0; font-size: 1.5rem; font-weight: 700; text-align: center; letter-spacing: -0.02em; }
+        .page-card .sub { text-align: center; color: var(--text-soft); font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.5; }
+        .page-card .btn-submit { width: 100%; margin-top: 1.5rem; min-height: 52px; font-size: 1.05rem; border-radius: var(--radius-sm); }
+        .page-card .footer-note { text-align: center; margin-top: 1.5rem; color: var(--text-soft); font-size: 0.85rem; }
+        .page-card .footer-note a { font-weight: 600; }
+        .page-nav {
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            margin-bottom: 1.25rem;
+        }
+        .page-nav a, .page-nav span {
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-soft);
+            text-decoration: none;
+            transition: background var(--transition), color var(--transition);
+        }
+        .page-nav a:hover { color: var(--accent); background: var(--accent-dim); }
+        .page-nav .active { color: var(--accent); background: var(--accent-dim); pointer-events: none; }
         {% block extra_css %}{% endblock %}
     </style>
 </head>
-<body class="page-enter">
+<body class="page-enter {% if active_page %}page-{{ active_page }}{% endif %}">
     {% block body %}{% endblock %}
     {% block extra_js %}{% endblock %}
 </body>

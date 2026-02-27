@@ -20,6 +20,15 @@ def _security_headers(response):
     return security.add_security_headers(response)
 
 
+@app.context_processor
+def _inject_active_page():
+    """کلاس بدنه برای هر صفحه (صفحهٔ فعال)."""
+    name = request.endpoint.replace(".", "-") if request.endpoint else ""
+    return {"active_page": name}
+
+
+
+
 def admin_required(f):
     from functools import wraps
     @wraps(f)

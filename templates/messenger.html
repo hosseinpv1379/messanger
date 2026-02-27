@@ -242,6 +242,11 @@
     border-color: rgba(6, 182, 212, 0.3);
     transform: translateX(-2px);
 }
+.chat-placeholder .history-item.active {
+    background: rgba(6, 182, 212, 0.18);
+    border-color: rgba(6, 182, 212, 0.45);
+    box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.2);
+}
 .chat-placeholder .history-item:active { transform: scale(0.99); }
 .chat-placeholder .history-item .h-username { font-weight: 700; margin-bottom: 0.25rem; font-size: 1rem; }
 .chat-placeholder .history-item .h-preview { font-size: 0.85rem; color: var(--text-soft); line-height: 1.4; }
@@ -1165,7 +1170,8 @@ function loadConversations(q) {
                 var safeName = escapeHtml(rawName);
                 var safePreview = escapeHtml(c.last_preview || '');
                 var safeTime = escapeHtml(c.last_at || '');
-                return '<li class="history-item" data-id="' + c.other_id + '" data-name="' + safeName + '" style="animation-delay:' + (i * 0.03) + 's">' +
+                var isActive = (c.other_id === currentOtherId);
+                return '<li class="history-item' + (isActive ? ' active' : '') + '" data-id="' + c.other_id + '" data-name="' + safeName + '" style="animation-delay:' + (i * 0.03) + 's">' +
                     '<div class="h-username">' + safeName + '</div>' +
                     '<div class="h-preview">' + safePreview + '</div>' +
                     '<div class="h-time">' + safeTime + '</div></li>';
@@ -1203,8 +1209,6 @@ backBtn.addEventListener('click', function() {
         stopChatPoll();
         if (isVoiceRecording) stopVoiceRecording();
         hideVoicePreview();
-        currentOtherId = null;
-        currentOtherName = null;
         lastChatMessageCount = 0;
         lastChatLastId = 0;
         selectedFile = null;
