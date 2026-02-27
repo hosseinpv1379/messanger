@@ -428,6 +428,59 @@ html.theme-light .voice-recording { background: #fff; border-color: rgba(220, 38
 html.theme-light .voice-preview { background: var(--tg-panel); border-color: var(--tg-border); }
 html.theme-light .pwa-install-banner { box-shadow: 0 -4px 24px rgba(0,0,0,0.1); }
 
+.contact-profile-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s var(--ease), visibility 0.25s var(--ease);
+}
+.contact-profile-overlay.open {
+    opacity: 1;
+    visibility: visible;
+}
+.contact-profile-modal {
+    background: var(--tg-panel);
+    border-radius: 20px;
+    max-width: 360px;
+    width: 100%;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 48px rgba(0,0,0,0.35);
+    border: 1px solid var(--tg-border);
+}
+.contact-profile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--tg-border);
+}
+.contact-profile-header h3 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--tg-text); }
+.contact-profile-close { font-size: 1.5rem; line-height: 1; }
+.contact-profile-body {
+    padding: 1.5rem 1.25rem;
+    overflow-y: auto;
+    text-align: center;
+}
+.contact-profile-body .profile-avatar-wrap {
+    width: 90px;
+    height: 90px;
+    margin: 0 auto 1rem;
+}
+.contact-profile-body .profile-display-name { margin: 0 0 0.25rem; font-size: 1.2rem; }
+.contact-profile-body .profile-username { margin: 0 0 0.75rem; font-size: 0.9rem; color: var(--tg-text-secondary); }
+.contact-profile-body .profile-bio { margin: 0; font-size: 0.9rem; color: var(--tg-text-secondary); line-height: 1.6; white-space: pre-wrap; text-align: center; }
+html.theme-light .contact-profile-modal { background: var(--tg-panel); box-shadow: 0 24px 48px rgba(0,0,0,0.2); }
+
 .settings-about {
     font-size: 0.9rem;
     color: var(--text-soft);
@@ -1146,6 +1199,7 @@ html.theme-light .chat-messages {
             <span class="tg-chat-header-title" id="chatHeaderTitle">مسنجر</span>
             <div class="tg-chat-header-actions" id="headerActions">
                 <div class="chat-with-actions chat-actions-1-1" id="chatHeaderActions1" style="display: none;">
+                    <button type="button" class="tg-icon-btn" id="chatViewProfileBtn" title="پروفایل">👤</button>
                     <button type="button" class="tg-icon-btn" id="chatSearchToggle" title="جستجو در چت">🔍</button>
                     <button type="button" class="tg-icon-btn" id="chatClearChatBtn" title="حذف گفتگو">🗑</button>
                     <button type="button" class="btn btn-ghost btn-sm" id="blockBtn" style="display: none;">مسدود</button>
@@ -1375,6 +1429,23 @@ html.theme-light .chat-messages {
         <button type="button" class="pwa-dismiss" id="pwaInstallDismiss" aria-label="بستن">×</button>
     </div>
 </div>
+<div class="contact-profile-overlay" id="contactProfileOverlay" aria-hidden="true">
+    <div class="contact-profile-modal" id="contactProfileModal" role="dialog" aria-labelledby="contactProfileTitle">
+        <div class="contact-profile-header">
+            <h3 id="contactProfileTitle">پروفایل</h3>
+            <button type="button" class="tg-icon-btn contact-profile-close" id="contactProfileClose" aria-label="بستن">×</button>
+        </div>
+        <div class="contact-profile-body" id="contactProfileBody">
+            <div class="profile-avatar-wrap" id="contactProfileAvatarWrap">
+                <img id="contactProfileAvatarImg" alt="" style="display: none;">
+                <span id="contactProfileAvatarLetter">?</span>
+            </div>
+            <p class="profile-display-name" id="contactProfileDisplayName">—</p>
+            <p class="profile-username" id="contactProfileUsername">@</p>
+            <p class="profile-bio" id="contactProfileBio" style="display: none;"></p>
+        </div>
+    </div>
+</div>
 <div class="toast" id="toast" role="alert"></div>
 {% endblock %}
 {% block extra_js %}
@@ -1458,6 +1529,15 @@ const chatHeaderActionsGroup = document.getElementById('chatHeaderActionsGroup')
 const groupInviteLinkBtn = document.getElementById('groupInviteLinkBtn');
 const groupLeaveBtn = document.getElementById('groupLeaveBtn');
 const blockBtn = document.getElementById('blockBtn');
+const chatViewProfileBtn = document.getElementById('chatViewProfileBtn');
+const contactProfileOverlay = document.getElementById('contactProfileOverlay');
+const contactProfileClose = document.getElementById('contactProfileClose');
+const contactProfileAvatarWrap = document.getElementById('contactProfileAvatarWrap');
+const contactProfileAvatarImg = document.getElementById('contactProfileAvatarImg');
+const contactProfileAvatarLetter = document.getElementById('contactProfileAvatarLetter');
+const contactProfileDisplayName = document.getElementById('contactProfileDisplayName');
+const contactProfileUsername = document.getElementById('contactProfileUsername');
+const contactProfileBio = document.getElementById('contactProfileBio');
 const btnNotify = document.getElementById('btnNotify');
 const groupsList = document.getElementById('groupsList');
 const drawerNewGroupBtn = document.getElementById('drawerNewGroupBtn');
@@ -2918,6 +2998,50 @@ if (blockBtn) {
     });
 }
 
+if (contactProfileClose) contactProfileClose.addEventListener('click', function() {
+    if (contactProfileOverlay) { contactProfileOverlay.classList.remove('open'); contactProfileOverlay.setAttribute('aria-hidden', 'true'); }
+});
+if (contactProfileOverlay) contactProfileOverlay.addEventListener('click', function(e) {
+    if (e.target === contactProfileOverlay) {
+        contactProfileOverlay.classList.remove('open');
+        contactProfileOverlay.setAttribute('aria-hidden', 'true');
+    }
+});
+if (chatViewProfileBtn) {
+    chatViewProfileBtn.addEventListener('click', function() {
+        if (!currentOtherId) return;
+        if (contactProfileOverlay) {
+            contactProfileOverlay.setAttribute('aria-hidden', 'false');
+            contactProfileOverlay.classList.add('open');
+        }
+        if (contactProfileDisplayName) contactProfileDisplayName.textContent = '—';
+        if (contactProfileUsername) contactProfileUsername.textContent = '@';
+        if (contactProfileBio) { contactProfileBio.style.display = 'none'; contactProfileBio.textContent = ''; }
+        if (contactProfileAvatarImg) { contactProfileAvatarImg.removeAttribute('src'); contactProfileAvatarImg.style.display = 'none'; }
+        if (contactProfileAvatarLetter) contactProfileAvatarLetter.style.display = '';
+        fetch('/api/user/' + currentOtherId + '/profile').then(function(r) { return r.json(); }).then(function(p) {
+            if (p.error) { showToast(p.error); return; }
+            var name = (p.display_name || p.username || '').trim() || p.username || '—';
+            var letter = (name.charAt(0) || '?').toUpperCase();
+            if (contactProfileDisplayName) contactProfileDisplayName.textContent = name;
+            if (contactProfileUsername) contactProfileUsername.textContent = '@' + (p.username || '');
+            if (contactProfileBio) {
+                if (p.bio && p.bio.trim()) {
+                    contactProfileBio.textContent = p.bio.trim();
+                    contactProfileBio.style.display = 'block';
+                }
+            }
+            if (p.avatar_url && contactProfileAvatarImg && contactProfileAvatarLetter) {
+                contactProfileAvatarImg.src = p.avatar_url + '?t=' + Date.now();
+                contactProfileAvatarImg.style.display = 'block';
+                contactProfileAvatarLetter.style.display = 'none';
+            } else if (contactProfileAvatarLetter) {
+                contactProfileAvatarLetter.textContent = letter;
+                contactProfileAvatarLetter.style.display = '';
+            }
+        });
+    });
+}
 if (chatSearchToggle && chatSearchInChat && chatSearchInput) {
     chatSearchToggle.addEventListener('click', function() {
         chatSearchInChat.classList.toggle('visible');

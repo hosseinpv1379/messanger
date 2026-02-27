@@ -530,6 +530,17 @@ def api_keys_get(user_id):
     return jsonify({"public_key": base64.b64encode(key).decode()})
 
 
+@app.route("/api/user/<int:user_id>/profile")
+@user_required
+def api_user_profile(user_id):
+    """پروفایل عمومی یک کاربر (برای دیدن پروفایل طرف چت)."""
+    u = db.user_get_profile(user_id)
+    if not u:
+        return jsonify({"error": "کاربر یافت نشد"}), 404
+    u["avatar_url"] = url_for("api_avatar", user_id=user_id) if u.get("avatar_path") else None
+    return jsonify(u)
+
+
 @app.route("/api/user-by-username/<username>")
 @user_required
 def api_user_by_username(username):
